@@ -12,24 +12,36 @@ class SongModel {
   });
 }
 
-// DUMMY DATA:
+// DUMMY DATA: Now with real YouTube Video IDs!
 final List<SongModel> dummySongs = [
   SongModel(
-    id: '1',
+    id: 'K4DyBUG242c',
+    title: 'On & On',
+    artist: 'Cartoon',
+    coverArtUrl: 'https://img.youtube.com/vi/K4DyBUG242c/hqdefault.jpg', 
+  ),
+  SongModel(
+    id: 'jfKfPfyJRdk',
+    title: 'Lofi Test',
+    artist: 'Test Artist',
+    coverArtUrl: 'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg', 
+  ),
+  SongModel(
+    id: '4NRXx6U8ABQ', 
     title: 'Blinding Lights',
     artist: 'The Weeknd',
-    coverArtUrl: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36', 
+    coverArtUrl: 'https://img.youtube.com/vi/4NRXx6U8ABQ/hqdefault.jpg', // Changed here
   ),
   SongModel(
-    id: '2',
+    id: 'TUVcZfQe-Kw', 
     title: 'Levitating',
     artist: 'Dua Lipa',
-    coverArtUrl: 'https://i.scdn.co/image/ab67616d0000b273bd26ede1ae69327010d49946',
+    coverArtUrl: 'https://img.youtube.com/vi/TUVcZfQe-Kw/hqdefault.jpg', // Changed here
   ),
   SongModel(
-    id: '3',
+    id: 'ic8j13piAhQ', 
     title: 'Cruel Summer',
     artist: 'Taylor Swift',
-    coverArtUrl: 'https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647',
+    coverArtUrl: 'https://img.youtube.com/vi/ic8j13piAhQ/hqdefault.jpg', // Changed here
   ),
 ];

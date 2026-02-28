@@ -1,7 +1,7 @@
-// lib/features/discover/discover_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'dart:async';
 import '../../models/song_model.dart';
 
 class DiscoverScreen extends StatefulWidget {
@@ -13,6 +13,50 @@ class DiscoverScreen extends StatefulWidget {
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
   final CardSwiperController _swiperController = CardSwiperController();
+
+  late YoutubePlayerController _ytController;
+  Timer? _playbackTimer;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _ytController = YoutubePlayerController(
+      params: const YoutubePlayerParams(
+        showControls: false,
+        mute: false,
+        showFullscreenButton: false,
+        loop: false,
+        origin: 'https://www.youtube-nocookie.com',
+      ),
+    );
+
+    if (dummySongs.isNotEmpty) {
+      _loadAndPlayPreview(dummySongs[0].id);
+    }
+  }
+
+  void _loadAndPlayPreview(String videoId) async {
+    // Cancel any previous timer if they swiped fast
+    _playbackTimer?.cancel();
+
+    // Load the video and strat playing at 0:45
+    await _ytController.loadVideoById(videoId: videoId, startSeconds: 45);
+    _ytController.playVideo();
+
+    // Start a 30-second countdown timer
+    _playbackTimer = Timer(const Duration(seconds: 30), () {
+      _ytController.pauseVideo();
+      print("Preview finished. Awaiting next swipe.");
+    });
+  }
+
+  @override
+  void dispose() {
+    _playbackTimer?.cancel();
+    _ytController.close();
+    super.dispose();
+  }
 
   bool _onSwipe(
     int previousIndex,
@@ -26,7 +70,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     } else if (direction == CardSwiperDirection.right) {
       print('Bopped (Saved): ${swipedSong.title}');
     }
-    return true; 
+
+    // If there is another card coming up, play its audio!
+    if (currentIndex != null && currentIndex < dummySongs.length) {
+      _loadAndPlayPreview(dummySongs[currentIndex].id);
+    } else {
+      // If we ran out of cards, stop the music
+      _ytController.pauseVideo();
+      _playbackTimer?.cancel();
+    }
+
+    return true;
   }
 
   @override
@@ -36,45 +90,67 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Discover', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Discover',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            Expanded(
-              child: CardSwiper(
-                controller: _swiperController,
-                cardsCount: dummySongs.length,
-                onSwipe: _onSwipe,
-                allowedSwipeDirection: const AllowedSwipeDirection.symmetric(
-                  horizontal: true,
-                ),
-                cardBuilder: (context, index, percentThresholdX, percentThresholdY) {
-                  return _buildCard(dummySongs[index]);
-                },
-              ),
+            Offstage(
+              offstage: true,
+              child: YoutubePlayer(controller: _ytController),
             ),
-            const SizedBox(height: 20),
-            // Manual Buttons for tapping instead of dragging
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+
+            Column(
               children: [
-                FloatingActionButton(
-                  heroTag: 'drop',
-                  onPressed: () => _swiperController.swipe(CardSwiperDirection.left),
-                  backgroundColor: Colors.redAccent,
-                  child: const Icon(Icons.close, size: 30, color: Colors.white),
+                Expanded(
+                  child: CardSwiper(
+                    controller: _swiperController,
+                    cardsCount: dummySongs.length,
+                    onSwipe: _onSwipe,
+                    allowedSwipeDirection:
+                        const AllowedSwipeDirection.symmetric(horizontal: true),
+                    cardBuilder:
+                        (context, index, percentThresholdX, percentThresholdY) {
+                          return _buildCard(dummySongs[index]);
+                        },
+                  ),
                 ),
-                FloatingActionButton(
-                  heroTag: 'bop',
-                  onPressed: () => _swiperController.swipe(CardSwiperDirection.right),
-                  backgroundColor: Colors.greenAccent[400],
-                  child: const Icon(Icons.favorite, size: 30, color: Colors.white),
+                const SizedBox(height: 20),
+                // Manual Buttons for tapping instead of dragging
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    FloatingActionButton(
+                      heroTag: 'drop',
+                      onPressed: () =>
+                          _swiperController.swipe(CardSwiperDirection.left),
+                      backgroundColor: Colors.redAccent,
+                      child: const Icon(
+                        Icons.close,
+                        size: 30,
+                        color: Colors.white,
+                      ),
+                    ),
+                    FloatingActionButton(
+                      heroTag: 'bop',
+                      onPressed: () =>
+                          _swiperController.swipe(CardSwiperDirection.right),
+                      backgroundColor: Colors.greenAccent[400],
+                      child: const Icon(
+                        Icons.favorite,
+                        size: 30,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 40),
               ],
             ),
-            const SizedBox(height: 40),
           ],
         ),
       ),
@@ -94,7 +170,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.5),
+            color: Colors.black.withValues(alpha: 0.5),
             blurRadius: 10,
             spreadRadius: 2,
           ),
@@ -125,10 +201,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ),
             Text(
               song.artist,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 18,
-              ),
+              style: const TextStyle(color: Colors.grey, fontSize: 18),
             ),
           ],
         ),
