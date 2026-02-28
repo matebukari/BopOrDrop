@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../discover/discover_screen.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -7,7 +8,10 @@ class LoginScreen extends StatelessWidget {
   // These functions are placeholders. We will add the actual 
   // Firebase/OAuth login logic to them in the next steps!
   void _loginWithSpotify(BuildContext context) {
-    print("Spotify button pressed!");
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const DiscoverScreen()),
+    );
     // TODO: Implement Spotify Auth
   }
 
