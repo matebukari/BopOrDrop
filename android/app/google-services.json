@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "503401496531",
+    "project_id": "bopordrop-495ed",
+    "storage_bucket": "bopordrop-495ed.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:503401496531:android:a1a8a320a94db75debb926",
+        "android_client_info": {
+          "package_name": "com.example.bop_or_drop"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA8eM9MQ__Zdu5qqv0O7UmT9lsdhc3X3Wg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
