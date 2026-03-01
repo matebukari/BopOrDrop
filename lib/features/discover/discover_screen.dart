@@ -3,6 +3,7 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import 'dart:async';
 import '../../models/song_model.dart';
+import '../profile/profile_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -106,6 +107,28 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
             Column(
               children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'BopOrDrop',
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.person, size: 30),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
                 Expanded(
                   child: CardSwiper(
                     controller: _swiperController,

@@ -7,6 +7,7 @@ import 'dart:convert';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  // Google sign in
   Future<User?> signInWithGoogle() async {
     try {
       // 1. Initialize the global instance
@@ -36,6 +37,7 @@ class AuthService {
     }
   }
 
+  // Spotify sign in
   Future<void> signInWithSpotify() async {
     const String clientId = 'e1eaf72cd97b4e0ea69a359473c626fd'; 
     const String clientSecret = '8323a50df19d4ab9864b18c663a50043';
@@ -90,6 +92,20 @@ class AuthService {
       }
     } catch (e) {
       print("Spotify login canceled or failed: $e");
+    }
+  }
+
+  // Sign out
+  Future<void> signOut() async {
+    try {
+      // Sign out of Google
+      await GoogleSignIn.instance.signOut();
+      // Sign out of Firebase
+      await _auth.signOut();
+      // (Later, we will also clear the Spotify Access Token here!)
+      print("Successfully signed out.");
+    } catch (e) {
+      print("Error signing out: $e");
     }
   }
 }
