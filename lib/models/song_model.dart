@@ -12,7 +12,7 @@ class SongModel {
   });
 }
 
-// DUMMY DATA: Now with real YouTube Video IDs!
+// DUMMY DATA
 final List<SongModel> dummySongs = [
   SongModel(
     id: 'K4DyBUG242c',

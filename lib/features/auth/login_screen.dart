@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../discover/discover_screen.dart';
+import '../../services/auth_service.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
-  // These functions are placeholders. We will add the actual 
-  // Firebase/OAuth login logic to them in the next steps!
   void _loginWithSpotify(BuildContext context) {
     Navigator.pushReplacement(
       context,
@@ -15,15 +14,28 @@ class LoginScreen extends StatelessWidget {
     // TODO: Implement Spotify Auth
   }
 
-  void _loginWithYouTube(BuildContext context) {
-    print("YouTube button pressed!");
-    // TODO: Implement YouTube/Google Auth
+  void _loginWithYouTube(BuildContext context) async {
+    print("Starting Google/YouTube login...");
+    
+    final user = await AuthService().signInWithGoogle();
+
+    // If login is successful, jump to the Discover Screen!
+    if (user != null && context.mounted) {
+      print("Successfully logged in as: ${user.displayName}");
+      
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const DiscoverScreen()),
+      );
+    } else {
+      print("Login failed or was canceled.");
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212), // Deep dark background
+      backgroundColor: const Color(0xFF121212),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
