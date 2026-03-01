@@ -6,12 +6,17 @@ import '../../services/auth_service.dart';
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
-  void _loginWithSpotify(BuildContext context) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const DiscoverScreen()),
-    );
-    // TODO: Implement Spotify Auth
+  void _loginWithSpotify(BuildContext context) async {
+    print("Starting Spotify login...");
+    await AuthService().signInWithSpotify();
+    
+    // For now, we'll just go to the Discover Screen if they click it
+    if (context.mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const DiscoverScreen()),
+      );
+    }
   }
 
   void _loginWithYouTube(BuildContext context) async {

@@ -42,6 +42,7 @@ dependencies:
   youtube_player_iframe: ^5.2.2
   http: ^1.6.0
   font_awesome_flutter: ^10.12.0
+  flutter_web_auth_2: ^5.0.1
 
 dev_dependencies:
   flutter_test:
