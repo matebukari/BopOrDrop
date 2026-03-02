@@ -8,14 +8,15 @@ class LoginScreen extends StatelessWidget {
 
   void _loginWithSpotify(BuildContext context) async {
     print("Starting Spotify login...");
-    await AuthService().signInWithSpotify();
+    final bool success = await AuthService().signInWithSpotify();
     
-    // For now, we'll just go to the Discover Screen if they click it
-    if (context.mounted) {
+    if (success && context.mounted) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const DiscoverScreen()),
       );
+    } else {
+      print("Did not navigate: Spotify login was not successful.");
     }
   }
 

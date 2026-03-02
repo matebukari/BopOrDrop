@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:http/http.dart' as http;
@@ -6,6 +7,7 @@ import 'dart:convert';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   // Google sign in
   Future<User?> signInWithGoogle() async {
@@ -38,7 +40,7 @@ class AuthService {
   }
 
   // Spotify sign in
-  Future<void> signInWithSpotify() async {
+  Future<bool> signInWithSpotify() async {
     const String clientId = 'e1eaf72cd97b4e0ea69a359473c626fd'; 
     const String clientSecret = '8323a50df19d4ab9864b18c663a50043';
     const String redirectUri = 'bopordrop://callback';
@@ -48,7 +50,6 @@ class AuthService {
       'response_type': 'code',
       'client_id': clientId,
       'redirect_uri': redirectUri,
-      // We are asking for permission to read their email and modify their playlists!
       'scope': 'user-read-private user-read-email playlist-modify-public playlist-modify-private',
     });
 
@@ -83,15 +84,21 @@ class AuthService {
         if (tokenResponse.statusCode == 200) {
           final tokenData = jsonDecode(tokenResponse.body);
           final accessToken = tokenData['access_token'];
-          print("SUCCESS! Logged into Spotify!");
-          print("Your Access Token: $accessToken");
-          // Later, we will save this token to Firebase!
+
+          await _storage.write(key: 'spotify_access_token', value: accessToken);
+
+          print("BOP: SUCCESS! Logged into Spotify!");
+          print("BOP: Your Access Token: $accessToken");
+          return true;
         } else {
-          print("Failed to get token: ${tokenResponse.body}");
+          print("BOP: Failed to get token: ${tokenResponse.body}");
+          return false;
         }
       }
+      return false;
     } catch (e) {
-      print("Spotify login canceled or failed: $e");
+      print("BOP: Spotify login canceled or failed: $e");
+      return false;
     }
   }
 
@@ -102,8 +109,11 @@ class AuthService {
       await GoogleSignIn.instance.signOut();
       // Sign out of Firebase
       await _auth.signOut();
-      // (Later, we will also clear the Spotify Access Token here!)
-      print("Successfully signed out.");
+
+      // Nuke the Spotify token from the secure vault!
+      await _storage.delete(key: 'spotify_access_token');
+
+      print("BOP: Successfully signed out.");
     } catch (e) {
       print("Error signing out: $e");
     }
