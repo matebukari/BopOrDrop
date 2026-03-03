@@ -17,6 +17,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   late YoutubePlayerController _ytController;
   Timer? _playbackTimer;
+  
+  bool _isPlaying = true;
+  bool _previewFinished = false; 
+  
+  String _currentVideoId = ''; 
 
   @override
   void initState() {
@@ -33,23 +38,60 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
 
     if (dummySongs.isNotEmpty) {
-      _loadAndPlayPreview(dummySongs[0].id);
+      _currentVideoId = dummySongs[0].id;
+      _loadAndPlayPreview(_currentVideoId);
     }
   }
 
   void _loadAndPlayPreview(String videoId) async {
-    // Cancel any previous timer if they swiped fast
     _playbackTimer?.cancel();
+    
+    setState(() {
+      _isPlaying = true;
+      _previewFinished = false;
+    });
 
-    // Load the video and strat playing at 0:45
     await _ytController.loadVideoById(videoId: videoId, startSeconds: 45);
     _ytController.playVideo();
 
-    // Start a 30-second countdown timer
+    _startPreviewTimer();
+  }
+
+  void _startPreviewTimer() {
+    _playbackTimer?.cancel();
     _playbackTimer = Timer(const Duration(seconds: 30), () {
       _ytController.pauseVideo();
-      print("Preview finished. Awaiting next swipe.");
+      
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _previewFinished = true; 
+        });
+      }
+      print("Preview finished. Awaiting next swipe or replay.");
     });
+  }
+
+  void _togglePlayPause() {
+    if (_isPlaying) {
+      // Just pause it
+      _ytController.pauseVideo();
+      setState(() {
+        _isPlaying = false;
+      });
+    } else {
+      // If they press play...
+      if (_previewFinished) {
+        print("Replaying the exact 30-second preview...");
+        _loadAndPlayPreview(_currentVideoId); 
+      } else {
+        // NORMAL PLAY LOGIC: Just resume where they paused
+        _ytController.playVideo();
+        setState(() {
+          _isPlaying = true;
+        });
+      }
+    }
   }
 
   @override
@@ -72,13 +114,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       print('Bopped (Saved): ${swipedSong.title}');
     }
 
-    // If there is another card coming up, play its audio!
     if (currentIndex != null && currentIndex < dummySongs.length) {
-      _loadAndPlayPreview(dummySongs[currentIndex].id);
+      _currentVideoId = dummySongs[currentIndex].id;
+      _loadAndPlayPreview(_currentVideoId);
     } else {
-      // If we ran out of cards, stop the music
       _ytController.pauseVideo();
       _playbackTimer?.cancel();
+      setState(() {
+        _isPlaying = false;
+        _previewFinished = false;
+      });
     }
 
     return true;
@@ -143,7 +188,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                // Manual Buttons for tapping instead of dragging
+                
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
@@ -158,6 +203,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         color: Colors.white,
                       ),
                     ),
+                    
+                    FloatingActionButton(
+                      heroTag: 'play_pause',
+                      onPressed: _togglePlayPause,
+                      backgroundColor: Colors.white,
+                      child: Icon(
+                        _isPlaying ? Icons.pause : Icons.play_arrow,
+                        size: 35,
+                        color: Colors.black,
+                      ),
+                    ),
+
                     FloatingActionButton(
                       heroTag: 'bop',
                       onPressed: () =>
@@ -180,7 +237,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
-  // The visual design of the physical card
   Widget _buildCard(SongModel song) {
     return Container(
       width: double.infinity,
