@@ -1,104 +1,51 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  // Google sign in
+  // Google & YouTube sign in
   Future<User?> signInWithGoogle() async {
     try {
-      // 1. Initialize the global instance
-      await GoogleSignIn.instance.initialize(
-        serverClientId: '503401496531-d3b7deh46v2q0ifbfqjmjejem04afism.apps.googleusercontent.com'
+      final googleSignIn = GoogleSignIn.instance;
+      
+      await googleSignIn.initialize(
+        serverClientId: '503401496531-d3b7deh46v2q0ifbfqjmjejem04afism.apps.googleusercontent.com',
       );
 
-      // 2. Trigger the Google Authentication flow
-      final GoogleSignInAccount googleUser = await GoogleSignIn.instance.authenticate();
-
-      // 3. Obtain the auth details
+      final GoogleSignInAccount googleUser = await googleSignIn.authenticate();
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+      
+      final List<String> scopes = [
+        'https://www.googleapis.com/auth/youtube',
+      ];
+      
+      print("BOP: Requesting YouTube permissions...");
+      
+      final authClient = googleUser.authorizationClient;
+      GoogleSignInClientAuthorization? authorization = await authClient.authorizationForScopes(scopes);
+      
+      authorization ??= await authClient.authorizeScopes(scopes);
 
-      // 4. Create a new credential that Firebase can understand
+      final String youtubeAccessToken = authorization.accessToken;
+
+      await _storage.write(key: 'youtube_access_token', value: youtubeAccessToken);
+      
       final OAuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
+        accessToken: youtubeAccessToken, 
       );
-
-      // 5. Securely sign in to Firebase with this credential
-      final UserCredential userCredential = await _auth.signInWithCredential(credential);
       
+      final UserCredential userCredential = await _auth.signInWithCredential(credential);
+
+      print("BOP: SUCCESS! Logged into Google with YouTube permissions!");
       return userCredential.user;
       
     } catch (e) {
-      print("Error signing in with Google: $e");
+      print("BOP: Error signing in with Google: $e");
       return null;
-    }
-  }
-
-  // Spotify sign in
-  Future<bool> signInWithSpotify() async {
-    const String clientId = 'e1eaf72cd97b4e0ea69a359473c626fd'; 
-    const String clientSecret = '8323a50df19d4ab9864b18c663a50043';
-    const String redirectUri = 'bopordrop://callback';
-
-    // 1. Construct the Spotify Auth URL
-    final url = Uri.https('accounts.spotify.com', '/authorize', {
-      'response_type': 'code',
-      'client_id': clientId,
-      'redirect_uri': redirectUri,
-      'scope': 'user-read-private user-read-email playlist-modify-public playlist-modify-private',
-    });
-
-    try {
-      print("Opening Spotify login window...");
-      // 2. Open the web browser to log in
-      final result = await FlutterWebAuth2.authenticate(
-        url: url.toString(),
-        callbackUrlScheme: 'bopordrop',
-      );
-
-      // 3. Extract the auth code from the URL Spotify sent back
-      final code = Uri.parse(result).queryParameters['code'];
-
-      if (code != null) {
-        print("Spotify Auth Code received! Fetching Access Token...");
-
-        // 4. Exchange the code for an Access Token
-        final tokenResponse = await http.post(
-          Uri.parse('https://accounts.spotify.com/api/token'),
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Authorization': 'Basic ${base64Encode(utf8.encode('$clientId:$clientSecret'))}',
-          },
-          body: {
-            'grant_type': 'authorization_code',
-            'code': code,
-            'redirect_uri': redirectUri,
-          },
-        );
-
-        if (tokenResponse.statusCode == 200) {
-          final tokenData = jsonDecode(tokenResponse.body);
-          final accessToken = tokenData['access_token'];
-
-          await _storage.write(key: 'spotify_access_token', value: accessToken);
-
-          print("BOP: SUCCESS! Logged into Spotify!");
-          print("BOP: Your Access Token: $accessToken");
-          return true;
-        } else {
-          print("BOP: Failed to get token: ${tokenResponse.body}");
-          return false;
-        }
-      }
-      return false;
-    } catch (e) {
-      print("BOP: Spotify login canceled or failed: $e");
-      return false;
     }
   }
 
@@ -109,9 +56,6 @@ class AuthService {
       await GoogleSignIn.instance.signOut();
       // Sign out of Firebase
       await _auth.signOut();
-
-      // Nuke the Spotify token from the secure vault!
-      await _storage.delete(key: 'spotify_access_token');
 
       print("BOP: Successfully signed out.");
     } catch (e) {

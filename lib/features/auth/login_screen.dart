@@ -6,20 +6,6 @@ import '../../services/auth_service.dart';
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
-  void _loginWithSpotify(BuildContext context) async {
-    print("Starting Spotify login...");
-    final bool success = await AuthService().signInWithSpotify();
-    
-    if (success && context.mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const DiscoverScreen()),
-      );
-    } else {
-      print("Did not navigate: Spotify login was not successful.");
-    }
-  }
-
   void _loginWithYouTube(BuildContext context) async {
     print("Starting Google/YouTube login...");
     
@@ -77,25 +63,6 @@ class LoginScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 60),
-
-              // 2. Spotify Button
-              ElevatedButton.icon(
-                onPressed: () => _loginWithSpotify(context),
-                icon: const FaIcon(FontAwesomeIcons.spotify, color: Colors.white),
-                label: const Text(
-                  'Continue with Spotify',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1DB954), // Official Spotify Green
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  elevation: 0,
-                ),
-              ),
-              const SizedBox(height: 20),
 
               // 3. YouTube Music Button
               ElevatedButton.icon(
