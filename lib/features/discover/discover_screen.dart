@@ -3,7 +3,6 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import 'dart:async';
 import '../../models/song_model.dart';
-import '../profile/profile_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -20,7 +19,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   
   bool _isPlaying = true;
   bool _previewFinished = false; 
-  
   String _currentVideoId = ''; 
 
   @override
@@ -51,6 +49,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       _previewFinished = false;
     });
 
+    // Load the video and start playing at 0:45
     await _ytController.loadVideoById(videoId: videoId, startSeconds: 45);
     _ytController.playVideo();
 
@@ -154,23 +153,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'BopOrDrop',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  child: Center(
+                    child: const Text(
+                      'BopOrDrop',
+                      style: TextStyle(
+                        fontSize: 24, 
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.person, size: 30),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const ProfileScreen()),
-                          );
-                        },
-                      ),
-                    ],
+                    ),
                   ),
                 ),
 

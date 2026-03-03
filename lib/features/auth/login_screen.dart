@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../discover/discover_screen.dart';
+import '../main/main_screen.dart';
 import '../../services/auth_service.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -17,7 +17,7 @@ class LoginScreen extends StatelessWidget {
       
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const DiscoverScreen()),
+        MaterialPageRoute(builder: (context) => const MainScreen()),
       );
     } else {
       print("Login failed or was canceled.");
@@ -64,7 +64,7 @@ class LoginScreen extends StatelessWidget {
               ),
               const SizedBox(height: 60),
 
-              // 3. YouTube Music Button
+              // 2. YouTube Music Button
               ElevatedButton.icon(
                 onPressed: () => _loginWithYouTube(context),
                 icon: const FaIcon(FontAwesomeIcons.youtube, color: Colors.white),
