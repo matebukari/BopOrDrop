@@ -4,6 +4,7 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import 'dart:async';
 
 import '../../models/song_model.dart';
+import '../../services/youtube_service.dart';
 import 'widgets/song_card.dart';
 import 'widgets/swipe_controls.dart';
 
@@ -16,6 +17,7 @@ class DiscoverScreen extends StatefulWidget {
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
   final CardSwiperController _swiperController = CardSwiperController();
+  final YoutubeService _youtubeService = YoutubeService();
   late YoutubePlayerController _ytController;
   Timer? _playbackTimer;
   
@@ -26,7 +28,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   void initState() {
     super.initState();
-
     _ytController = YoutubePlayerController(
       params: const YoutubePlayerParams(
         showControls: false,
@@ -45,16 +46,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   void _loadAndPlayPreview(String videoId) async {
     _playbackTimer?.cancel();
-    
     setState(() {
       _isPlaying = true;
       _previewFinished = false;
     });
 
-    // Load the video and start playing at 0:45
     await _ytController.loadVideoById(videoId: videoId, startSeconds: 45);
     _ytController.playVideo();
-
     _startPreviewTimer();
   }
 
@@ -62,7 +60,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     _playbackTimer?.cancel();
     _playbackTimer = Timer(const Duration(seconds: 30), () {
       _ytController.pauseVideo();
-      
       if (mounted) {
         setState(() {
           _isPlaying = false;
@@ -74,32 +71,26 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   void _togglePlayPause() {
     if (_isPlaying) {
-      // Just pause it
       _ytController.pauseVideo();
       setState(() => _isPlaying = false);
     } else {
-      // If they press play...
       if (_previewFinished) {
         _loadAndPlayPreview(_currentVideoId); 
       } else {
-        // NORMAL PLAY LOGIC: Just resume where they paused
         _ytController.playVideo();
         setState(() => _isPlaying = true);
       }
     }
   }
 
-  bool _onSwipe(
-    int previousIndex,
-    int? currentIndex,
-    CardSwiperDirection direction,
-  ) {
+  bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
     final swipedSong = dummySongs[previousIndex];
 
     if (direction == CardSwiperDirection.left) {
       print('Dropped: ${swipedSong.title}');
     } else if (direction == CardSwiperDirection.right) {
-      print('Bopped (Saved): ${swipedSong.title}');
+      print('Bopped: ${swipedSong.title}');
+      _youtubeService.likeVideo(swipedSong.id);
     }
 
     if (currentIndex != null && currentIndex < dummySongs.length) {
@@ -130,10 +121,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'Discover',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text('Discover', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -143,44 +131,56 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               offstage: true,
               child: YoutubePlayer(controller: _ytController),
             ),
-
             Column(
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-                  child: Center(
-                    child: const Text(
-                      'BopOrDrop',
-                      style: TextStyle(
-                        fontSize: 24, 
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                  child: Column(
+                    children: [
+                      const Text(
+                        'BopOrDrop',
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
-                    ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.library_music, color: Colors.grey[400], size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Saving to "Liked Music" on YouTube',
+                            style: TextStyle(
+                              color: Colors.grey[400], 
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-
+                
+                const SizedBox(height: 10),
                 Expanded(
                   child: CardSwiper(
                     controller: _swiperController,
                     cardsCount: dummySongs.length,
                     onSwipe: _onSwipe,
-                    allowedSwipeDirection:
-                      const AllowedSwipeDirection.symmetric(horizontal: true),
+                    allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
                     cardBuilder: (context, index, percentX, percentY) {
-                      return SongCard(song: dummySongs[index]);
+                      return SongCard(song: dummySongs[index]); 
                     },
                   ),
                 ),
                 const SizedBox(height: 20),
-
+                
                 SwipeControls(
+                  isPlaying: _isPlaying,
                   onDrop: () => _swiperController.swipe(CardSwiperDirection.left),
                   onBop: () => _swiperController.swipe(CardSwiperDirection.right),
                   onPlayPause: _togglePlayPause,
-                  isPlaying: _isPlaying,
                 ),
-                
                 const SizedBox(height: 40),
               ],
             ),
