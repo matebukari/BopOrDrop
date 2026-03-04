@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import 'dart:async';
+
 import '../../models/song_model.dart';
+import 'widgets/song_card.dart';
+import 'widgets/swipe_controls.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -13,7 +16,6 @@ class DiscoverScreen extends StatefulWidget {
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
   final CardSwiperController _swiperController = CardSwiperController();
-
   late YoutubePlayerController _ytController;
   Timer? _playbackTimer;
   
@@ -67,7 +69,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           _previewFinished = true; 
         });
       }
-      print("Preview finished. Awaiting next swipe or replay.");
     });
   }
 
@@ -75,29 +76,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     if (_isPlaying) {
       // Just pause it
       _ytController.pauseVideo();
-      setState(() {
-        _isPlaying = false;
-      });
+      setState(() => _isPlaying = false);
     } else {
       // If they press play...
       if (_previewFinished) {
-        print("Replaying the exact 30-second preview...");
         _loadAndPlayPreview(_currentVideoId); 
       } else {
         // NORMAL PLAY LOGIC: Just resume where they paused
         _ytController.playVideo();
-        setState(() {
-          _isPlaying = true;
-        });
+        setState(() => _isPlaying = true);
       }
     }
-  }
-
-  @override
-  void dispose() {
-    _playbackTimer?.cancel();
-    _ytController.close();
-    super.dispose();
   }
 
   bool _onSwipe(
@@ -124,8 +113,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         _previewFinished = false;
       });
     }
-
     return true;
+  }
+
+  @override
+  void dispose() {
+    _playbackTimer?.cancel();
+    _ytController.close();
+    super.dispose();
   }
 
   @override
@@ -171,107 +166,23 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     cardsCount: dummySongs.length,
                     onSwipe: _onSwipe,
                     allowedSwipeDirection:
-                        const AllowedSwipeDirection.symmetric(horizontal: true),
-                    cardBuilder:
-                        (context, index, percentThresholdX, percentThresholdY) {
-                          return _buildCard(dummySongs[index]);
-                        },
+                      const AllowedSwipeDirection.symmetric(horizontal: true),
+                    cardBuilder: (context, index, percentX, percentY) {
+                      return SongCard(song: dummySongs[index]);
+                    },
                   ),
                 ),
                 const SizedBox(height: 20),
-                
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    FloatingActionButton(
-                      heroTag: 'drop',
-                      onPressed: () =>
-                          _swiperController.swipe(CardSwiperDirection.left),
-                      backgroundColor: Colors.redAccent,
-                      child: const Icon(
-                        Icons.close,
-                        size: 30,
-                        color: Colors.white,
-                      ),
-                    ),
-                    
-                    FloatingActionButton(
-                      heroTag: 'play_pause',
-                      onPressed: _togglePlayPause,
-                      backgroundColor: Colors.white,
-                      child: Icon(
-                        _isPlaying ? Icons.pause : Icons.play_arrow,
-                        size: 35,
-                        color: Colors.black,
-                      ),
-                    ),
 
-                    FloatingActionButton(
-                      heroTag: 'bop',
-                      onPressed: () =>
-                          _swiperController.swipe(CardSwiperDirection.right),
-                      backgroundColor: Colors.greenAccent[400],
-                      child: const Icon(
-                        Icons.favorite,
-                        size: 30,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
+                SwipeControls(
+                  onDrop: () => _swiperController.swipe(CardSwiperDirection.left),
+                  onBop: () => _swiperController.swipe(CardSwiperDirection.right),
+                  onPlayPause: _togglePlayPause,
+                  isPlaying: _isPlaying,
                 ),
+                
                 const SizedBox(height: 40),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCard(SongModel song) {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        image: DecorationImage(
-          image: NetworkImage(song.coverArtUrl),
-          fit: BoxFit.cover,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 10,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: const LinearGradient(
-            colors: [Colors.transparent, Colors.black87],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: [0.6, 1.0],
-          ),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              song.title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              song.artist,
-              style: const TextStyle(color: Colors.grey, fontSize: 18),
             ),
           ],
         ),
