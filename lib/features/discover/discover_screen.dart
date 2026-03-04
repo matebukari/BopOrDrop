@@ -24,6 +24,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _isPlaying = true;
   bool _previewFinished = false; 
   String _currentVideoId = ''; 
+  bool _isLoading = true;
+  List<SongModel> _liveSongs = [];
 
   @override
   void initState() {
@@ -38,9 +40,23 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       ),
     );
 
-    if (dummySongs.isNotEmpty) {
-      _currentVideoId = dummySongs[0].id;
-      _loadAndPlayPreview(_currentVideoId);
+    _loadTrendingMusic();
+  }
+
+  Future<void> _loadTrendingMusic() async {
+    final songs = await _youtubeService.fetchTrendingMusic();
+
+    if (mounted) {
+      setState(() {
+        _liveSongs = songs;
+        _isLoading = false;
+      });
+
+      // Start the music if we actually got songs back
+      if (_liveSongs.isNotEmpty) {
+        _currentVideoId = _liveSongs[0].id;
+        _loadAndPlayPreview(_currentVideoId);
+      }
     }
   }
 
@@ -84,7 +100,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
-    final swipedSong = dummySongs[previousIndex];
+    final swipedSong = _liveSongs[previousIndex];
 
     if (direction == CardSwiperDirection.left) {
       print('Dropped: ${swipedSong.title}');
@@ -93,8 +109,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       _youtubeService.likeVideo(swipedSong.id);
     }
 
-    if (currentIndex != null && currentIndex < dummySongs.length) {
-      _currentVideoId = dummySongs[currentIndex].id;
+    if (currentIndex != null && currentIndex < _liveSongs.length) {
+      _currentVideoId = _liveSongs[currentIndex].id;
       _loadAndPlayPreview(_currentVideoId);
     } else {
       _ytController.pauseVideo();
@@ -163,15 +179,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 
                 const SizedBox(height: 10),
                 Expanded(
-                  child: CardSwiper(
-                    controller: _swiperController,
-                    cardsCount: dummySongs.length,
-                    onSwipe: _onSwipe,
-                    allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
-                    cardBuilder: (context, index, percentX, percentY) {
-                      return SongCard(song: dummySongs[index]); 
-                    },
-                  ),
+                  child: _isLoading
+                    ? const Center(child: CircularProgressIndicator(color: Colors.greenAccent))
+                    : _liveSongs.isEmpty
+                      ? const Center(child: Text("No songs found.", style: TextStyle(color: Colors.white)))
+                      : CardSwiper(
+                          controller: _swiperController,
+                          cardsCount: _liveSongs.length,
+                          onSwipe: _onSwipe,
+                          allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
+                          cardBuilder: (context, index, percentX, percentY) {
+                            return SongCard(song: _liveSongs[index]); 
+                          },
+                        ),
                 ),
                 const SizedBox(height: 20),
                 

@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../models/song_model.dart';
 
 class YoutubeService {
   final _storage = const FlutterSecureStorage();
@@ -42,6 +44,61 @@ class YoutubeService {
     } catch (e) {
       print('BOP EXCEPTION: Failed to make HTTP request: $e');
       return false;
+    }
+  }
+
+  Future<List<SongModel>> fetchTrendingMusic() async {
+    try {
+      final token = await _storage.read(key: 'youtube_access_token');
+
+      if (token == null) {
+        print('BOP ERROR: No YouTube access token found.');
+        return [];
+      }
+
+      // YouTube API endpoint for most popular videos in the Music category (10)
+      final url = Uri.parse(
+        'https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&videoCategoryId=10&regionCode=US&maxResults=20'
+      );
+
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List items = data['items'] ?? [];
+
+        // Convert the YouTube JSON data into the SongModel list
+        List<SongModel> fetchedSongs = items.map((item) {
+          final snippet = item['snippet'];
+
+          final thumbnails = snippet['thumbnails'];
+          final coverArt = thumbnails['maxres']?['url'] ?? 
+                           thumbnails['high']?['url'] ?? 
+                           thumbnails['default']?['url'] ?? '';
+
+          return SongModel(
+            id: item['id'],
+            title: snippet['title'],
+            artist: snippet['channelTitle'], // The channel name is usually the artist
+            coverArtUrl: coverArt,
+          );
+        }).toList();
+
+        print('BOP SUCCESS: Fetched ${fetchedSongs.length} trending songs!');
+        return fetchedSongs;
+      } else {
+        print('BOP ERROR: Failed to fetch music. Status Code: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('BOP EXCEPTION: Failed to fetch trending music: $e');
+      return [];
     }
   }
 }
