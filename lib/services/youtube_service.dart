@@ -35,6 +35,43 @@ class YoutubeService {
     }
   }
 
+  // --- NEW: Helper method to check which songs the user already liked ---
+  Future<Set<String>> _getAlreadyLikedIds(List<String> videoIds, String token) async {
+    if (videoIds.isEmpty) return {};
+
+    final idString = videoIds.join(',');
+    final url = Uri.parse('https://www.googleapis.com/youtube/v3/videos/getRating?id=$idString');
+
+    var response = await http.get(url, headers: {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
+
+    if (response.statusCode == 401) {
+      final newToken = await _refreshToken();
+      if (newToken != null) {
+        response = await http.get(url, headers: {
+          'Authorization': 'Bearer $newToken',
+          'Accept': 'application/json',
+        });
+      }
+    }
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final List items = data['items'] ?? [];
+      
+      Set<String> likedIds = {};
+      for (var item in items) {
+        if (item['rating'] == 'like') {
+          likedIds.add(item['videoId']);
+        }
+      }
+      return likedIds;
+    }
+    return {};
+  }
+
   Future<bool> likeVideo(String videoId) async {
     try {
       String? token = await _storage.read(key: 'youtube_access_token');
@@ -130,6 +167,21 @@ class YoutubeService {
             coverArtUrl: coverArt,
           );
         }).toList();
+
+        // Filter out songs the user already liked
+        if (token != null && fetchedSongs.isNotEmpty) {
+          print('BOP: Checking for already liked songs...');
+          final currentToken = await _storage.read(key: 'youtube_access_token');
+
+          if (currentToken != null) {
+            Set<String> alreadyLikedIds = await _getAlreadyLikedIds(
+              fetchedSongs.map((s) => s.id).toList(),
+              currentToken
+            );
+
+            fetchedSongs.removeWhere((song) => alreadyLikedIds.contains(song.id));
+          }
+        }
 
         print('BOP SUCCESS: Fetched ${fetchedSongs.length} trending songs!');
         return fetchedSongs;
