@@ -1,30 +1,50 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../models/song_model.dart';
 
 class YoutubeService {
   final _storage = const FlutterSecureStorage();
 
+  Future<String?> _refreshToken() async {
+    try {      
+      final googleSignIn = GoogleSignIn.instance;
+      
+      // Silently authenticate the currently logged-in user
+      final GoogleSignInAccount? account = await googleSignIn.attemptLightweightAuthentication();
+      
+      if (account != null) {
+        final authorization = await account.authorizationClient.authorizationForScopes([
+          'https://www.googleapis.com/auth/youtube',
+        ]);
+        
+        final String? newToken = authorization?.accessToken;
+        
+        if (newToken != null) {
+          await _storage.write(key: 'youtube_access_token', value: newToken);
+          print('BOP SUCCESS: Token refreshed and saved securely!');
+          return newToken;
+        }
+      }
+      print('BOP ERROR: Could not silently refresh token.');
+      return null;
+    } catch (e) {
+      print('BOP EXCEPTION: Failed to refresh token: $e');
+      return null;
+    }
+  }
+
   Future<bool> likeVideo(String videoId) async {
     try {
-      // Grab YouTube Access Token from secure vault
-      final token = await _storage.read(key: 'youtube_access_token');
+      String? token = await _storage.read(key: 'youtube_access_token');
+      if (token == null) return false;
 
-      if (token == null) {
-        print('BOP ERROR: No YouTube access token found. User might need to log in again.');
-        return false;
-      }
-
-      // YouTube API endpoint to "rate" (like/dislike) a video
       final url = Uri.parse(
         'https://www.googleapis.com/youtube/v3/videos/rate?id=$videoId&rating=like'
       );
 
-      print('BOP: Sending "Like" request to YouTube for video ID: $videoId...');
-
-      // 3. Fire POST request with the token
-      final response = await http.post(
+      var response = await http.post(
         url,
         headers: {
           'Authorization': 'Bearer $token',
@@ -32,13 +52,25 @@ class YoutubeService {
         },
       );
 
-      // YouTube returns '204 No Content' status code if it was successful!
+      // Catch Expired Token & Retry
+      if (response.statusCode == 401) {
+        print('BOP: Token expired! Refreshing...');
+        token = await _refreshToken();
+        
+        if (token != null) {
+          response = await http.post(
+            url,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          );
+        }
+      }
+
       if (response.statusCode == 204) {
-        print('BOP SUCCESS: 🎵 Successfully added to Liked Music! 🎵');
         return true;
       } else {
-        print('BOP ERROR: Failed to like video. Status Code: ${response.statusCode}');
-        print('BOP Response: ${response.body}');
         return false;
       }
     } catch (e) {
@@ -49,19 +81,14 @@ class YoutubeService {
 
   Future<List<SongModel>> fetchTrendingMusic() async {
     try {
-      final token = await _storage.read(key: 'youtube_access_token');
+      String? token = await _storage.read(key: 'youtube_access_token');
+      if (token == null) return [];
 
-      if (token == null) {
-        print('BOP ERROR: No YouTube access token found.');
-        return [];
-      }
-
-      // YouTube API endpoint for most popular videos in the Music category (10)
       final url = Uri.parse(
         'https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&videoCategoryId=10&regionCode=US&maxResults=20'
       );
 
-      final response = await http.get(
+      var response = await http.get(
         url,
         headers: {
           'Authorization': 'Bearer $token',
@@ -69,14 +96,28 @@ class YoutubeService {
         },
       );
 
+      // Catch Expired Token & Retry
+      if (response.statusCode == 401) {
+        print('BOP: Token expired! Refreshing...');
+        token = await _refreshToken();
+        
+        if (token != null) {
+          response = await http.get(
+            url,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          );
+        }
+      }
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List items = data['items'] ?? [];
-
-        // Convert the YouTube JSON data into the SongModel list
+        
         List<SongModel> fetchedSongs = items.map((item) {
           final snippet = item['snippet'];
-
           final thumbnails = snippet['thumbnails'];
           final coverArt = thumbnails['maxres']?['url'] ?? 
                            thumbnails['high']?['url'] ?? 
@@ -85,7 +126,7 @@ class YoutubeService {
           return SongModel(
             id: item['id'],
             title: snippet['title'],
-            artist: snippet['channelTitle'], // The channel name is usually the artist
+            artist: snippet['channelTitle'], 
             coverArtUrl: coverArt,
           );
         }).toList();
