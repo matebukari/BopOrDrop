@@ -23,9 +23,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   
   bool _isPlaying = true;
   bool _previewFinished = false; 
-  String _currentVideoId = ''; 
+  String _currentVideoId = '';
+
   bool _isLoading = true;
   List<SongModel> _liveSongs = [];
+
+  String? _nextPageToken;
+  bool _isFetchingMore = false;
 
   @override
   void initState() {
@@ -44,11 +48,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Future<void> _loadTrendingMusic() async {
-    final songs = await _youtubeService.fetchTrendingMusic();
+    final results = await _youtubeService.fetchTrendingMusic();
 
     if (mounted) {
       setState(() {
-        _liveSongs = songs;
+        _liveSongs = results.songs;
+        _nextPageToken = results.nextPageToken;
         _isLoading = false;
       });
 
@@ -57,6 +62,37 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         _currentVideoId = _liveSongs[0].id;
         _loadAndPlayPreview(_currentVideoId);
       }
+
+      if (_liveSongs.length < 15 && _nextPageToken != null) {
+        print('BOP: Initial deck too small after filtering! Auto-fetching more...');
+        _fetchMoreMusic();
+      }
+    }
+  }
+
+  // The function that secretly grabs more songs in the background
+  Future<void> _fetchMoreMusic() async {
+    if (_isFetchingMore || _nextPageToken == null) return;
+
+    print('BOP: Running low on cards! Fetching more secretly in the background...');
+    setState(() {
+      _isFetchingMore = true;
+    });
+
+    final result = await _youtubeService.fetchTrendingMusic(pageToken: _nextPageToken);
+
+    if (mounted) {
+      setState(() {
+        _liveSongs.addAll(result.songs);
+        _nextPageToken = result.nextPageToken;
+        _isFetchingMore = false;
+      });
+      print('BOP: Added ${result.songs.length} new cards. Deck size is now ${_liveSongs.length}!');
+    }
+
+    if ((result.songs.isEmpty || _liveSongs.length < 15) && _nextPageToken != null) {
+      print('BOP: Deck still needs more cards, fetching next page immediately!');
+      _fetchMoreMusic();
     }
   }
 
@@ -102,16 +138,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
     final swipedSong = _liveSongs[previousIndex];
 
-    if (direction == CardSwiperDirection.left) {
-      print('Dropped: ${swipedSong.title}');
-    } else if (direction == CardSwiperDirection.right) {
-      print('Bopped: ${swipedSong.title}');
-      _youtubeService.likeVideo(swipedSong.id);
-    }
+    if (direction == CardSwiperDirection.right) _youtubeService.likeVideo(swipedSong.id);
 
-    if (currentIndex != null && currentIndex < _liveSongs.length) {
-      _currentVideoId = _liveSongs[currentIndex].id;
-      _loadAndPlayPreview(_currentVideoId);
+    if (currentIndex != null) {
+      // If the user is 5 cards away from the end of the deck, go fetch more!
+      if (currentIndex >= _liveSongs.length - 10) {
+        _fetchMoreMusic();
+      }
+
+      if (currentIndex < _liveSongs.length) {
+        _currentVideoId = _liveSongs[currentIndex].id;
+        _loadAndPlayPreview(_currentVideoId);
+      }
     } else {
       _ytController.pauseVideo();
       _playbackTimer?.cancel();
@@ -186,6 +224,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       : CardSwiper(
                           controller: _swiperController,
                           cardsCount: _liveSongs.length,
+                          isLoop: false,
                           onSwipe: _onSwipe,
                           allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
                           cardBuilder: (context, index, percentX, percentY) {

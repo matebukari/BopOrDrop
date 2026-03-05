@@ -4,6 +4,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/song_model.dart';
 
+class FetchResults {
+  final List<SongModel> songs;
+  final String? nextPageToken;
+
+  FetchResults({required this.songs, this.nextPageToken});
+}
+
 class YoutubeService {
   final _storage = const FlutterSecureStorage();
 
@@ -35,7 +42,7 @@ class YoutubeService {
     }
   }
 
-  // --- NEW: Helper method to check which songs the user already liked ---
+  // Helper method to check which songs the user already liked
   Future<Set<String>> _getAlreadyLikedIds(List<String> videoIds, String token) async {
     if (videoIds.isEmpty) return {};
 
@@ -116,14 +123,18 @@ class YoutubeService {
     }
   }
 
-  Future<List<SongModel>> fetchTrendingMusic() async {
+  Future<FetchResults> fetchTrendingMusic({String? pageToken}) async {
     try {
       String? token = await _storage.read(key: 'youtube_access_token');
-      if (token == null) return [];
+      if (token == null) return FetchResults(songs: []);
 
-      final url = Uri.parse(
-        'https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&videoCategoryId=10&regionCode=US&maxResults=20'
-      );
+
+      String urlString = 'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UU_aEa8K-EOJ3D6gOs7HcyNg&maxResults=10';
+      if (pageToken != null) {
+        urlString += '&pageToken=${Uri.encodeComponent(pageToken)}';
+      }
+
+      final url = Uri.parse(urlString);
 
       var response = await http.get(
         url,
@@ -133,11 +144,8 @@ class YoutubeService {
         },
       );
 
-      // Catch Expired Token & Retry
       if (response.statusCode == 401) {
-        print('BOP: Token expired! Refreshing...');
         token = await _refreshToken();
-        
         if (token != null) {
           response = await http.get(
             url,
@@ -152,25 +160,42 @@ class YoutubeService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List items = data['items'] ?? [];
+        final String? nextToken = data['nextPageToken'];
         
-        List<SongModel> fetchedSongs = items.map((item) {
+        List<SongModel> fetchedSongs = [];
+
+        for (var item in items) {
           final snippet = item['snippet'];
+          final videoId = snippet['resourceId']?['videoId'];
+          if (videoId == null) continue;
+          
           final thumbnails = snippet['thumbnails'];
+          if (thumbnails == null) continue;
+          
           final coverArt = thumbnails['maxres']?['url'] ?? 
                            thumbnails['high']?['url'] ?? 
                            thumbnails['default']?['url'] ?? '';
+                           
+          String rawTitle = snippet['title'] ?? 'Unknown Title';
+          String title = rawTitle;
+          String artist = snippet['videoOwnerChannelTitle'] ?? 'Unknown Artist';
+          
+          if (rawTitle.contains(' - ')) {
+            final parts = rawTitle.split(' - ');
+            artist = parts[0].trim();
+            // Clean up the UI by removing "[NCS Release]" and "(feat. X)"
+            title = parts[1].replaceAll(RegExp(r'\[.*?\]'), '').replaceAll(RegExp(r'\(.*?\)'), '').trim();
+          }
 
-          return SongModel(
-            id: item['id'],
-            title: snippet['title'],
-            artist: snippet['channelTitle'], 
+          fetchedSongs.add(SongModel(
+            id: videoId,
+            title: title,
+            artist: artist, 
             coverArtUrl: coverArt,
-          );
-        }).toList();
+          ));
+        }
 
-        // Filter out songs the user already liked
         if (token != null && fetchedSongs.isNotEmpty) {
-          print('BOP: Checking for already liked songs...');
           final currentToken = await _storage.read(key: 'youtube_access_token');
 
           if (currentToken != null) {
@@ -184,14 +209,15 @@ class YoutubeService {
         }
 
         print('BOP SUCCESS: Fetched ${fetchedSongs.length} trending songs!');
-        return fetchedSongs;
+        return FetchResults(songs: fetchedSongs, nextPageToken: nextToken);
       } else {
         print('BOP ERROR: Failed to fetch music. Status Code: ${response.statusCode}');
-        return [];
+        print('BOP ERROR BODY: ${response.body}');
+        return FetchResults(songs: []);
       }
     } catch (e) {
       print('BOP EXCEPTION: Failed to fetch trending music: $e');
-      return [];
+      return FetchResults(songs: []);
     }
   }
 }
