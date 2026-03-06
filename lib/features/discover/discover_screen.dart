@@ -31,6 +31,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   String? _nextPageToken;
   bool _isFetchingMore = false;
 
+  bool _isDeckEmpty = false;
+
   @override
   void initState() {
     super.initState();
@@ -219,28 +221,56 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 Expanded(
                   child: _isLoading
                     ? const Center(child: CircularProgressIndicator(color: Colors.greenAccent))
-                    : _liveSongs.isEmpty
-                      ? const Center(child: Text("No songs found.", style: TextStyle(color: Colors.white)))
-                      : CardSwiper(
-                          controller: _swiperController,
-                          cardsCount: _liveSongs.length,
-                          isLoop: false,
-                          onSwipe: _onSwipe,
-                          allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
-                          cardBuilder: (context, index, percentX, percentY) {
-                            return SongCard(song: _liveSongs[index]); 
-                          },
-                        ),
+                    : _isDeckEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.check_circle_outline, size: 80, color: Colors.greenAccent[400]),
+                              const SizedBox(height: 20),
+                              const Text(
+                                "You're all caught up!", 
+                                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                "Check back later for more music.", 
+                                style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        )
+                      : _liveSongs.isEmpty
+                        ? const Center(child: Text("No songs found.", style: TextStyle(color: Colors.white)))
+                        : CardSwiper(
+                            controller: _swiperController,
+                            cardsCount: _liveSongs.length,
+                            isLoop: false,
+                            onEnd: () {
+                              setState(() {
+                                _isDeckEmpty = true;
+                              });
+                              _ytController.pauseVideo();
+                              _playbackTimer?.cancel();
+                            },                            
+                            onSwipe: _onSwipe,
+                            allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
+                            cardBuilder: (context, index, percentX, percentY) {
+                              return SongCard(song: _liveSongs[index]); 
+                            },
+                          ),
                 ),
-                const SizedBox(height: 20),
                 
-                SwipeControls(
-                  isPlaying: _isPlaying,
-                  onDrop: () => _swiperController.swipe(CardSwiperDirection.left),
-                  onBop: () => _swiperController.swipe(CardSwiperDirection.right),
-                  onPlayPause: _togglePlayPause,
-                ),
-                const SizedBox(height: 40),
+                if (!_isDeckEmpty && _liveSongs.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  SwipeControls(
+                    isPlaying: _isPlaying,
+                    onDrop: () => _swiperController.swipe(CardSwiperDirection.left),
+                    onBop: () => _swiperController.swipe(CardSwiperDirection.right),
+                    onPlayPause: _togglePlayPause,
+                  ),
+                  const SizedBox(height: 40),
+                ],
               ],
             ),
           ],
