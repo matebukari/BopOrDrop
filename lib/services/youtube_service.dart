@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/song_model.dart';
+import '../models/playlist_model.dart';
 import 'dart:ui' as ui;
 
 class FetchResults {
@@ -198,14 +199,154 @@ class YoutubeService {
     return regionalPlaylists[region] ?? 'PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i'; 
   }
 
-  Future<FetchResults> fetchTrendingMusic({String? pageToken}) async {
+  // Fetch user playlists
+  Future<List<PlaylistModel>> fetchMyPlaylists() async {
+    try {
+      String? token = await _storage.read(key: 'youtube_access_token');
+      if (token == null) return [];
+
+      final url = Uri.parse('https://www.googleapis.com/youtube/v3/playlists?part=snippet&mine=true&maxResults=50');
+      var response = await http.get(url, headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'});
+
+      if (response.statusCode == 401) {
+        token = await _refreshToken();
+        if (token != null) response = await http.get(url, headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'});
+      }
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List items = data['items'] ?? [];
+
+        List<PlaylistModel> playlists = items.map((item) {
+          return PlaylistModel(
+            id: item['id'],
+            title: item['snippet']['title'],
+          );
+        }).toList();
+
+        return  playlists;
+      }
+      return [];
+    } catch (e) {
+      print('BOP EXCEPTION: Failed to fetch playlists: $e');
+      return [];
+    }
+  }
+
+  // Get IDs of songs already in a specific playlist
+  Future<Set<String>> _getAlreadyInPlaylistIds(String playlistId, String token) async {
+    Set<String> savedIds = {};
+    String? nextPageToken;
+
+    try {
+      do {
+        String urlString = 'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=$playlistId&maxResults=50';
+        
+        if (nextPageToken != null) {
+          urlString += '&pageToken=${Uri.encodeComponent(nextPageToken)}';
+        }
+
+        final url = Uri.parse(urlString);
+        var response = await http.get(url, headers: {
+          'Authorization': 'Bearer $token', 
+          'Accept': 'application/json'
+        });
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final List items = data['items'] ?? [];
+
+          for (var item in items) {
+            final videoId = item['snippet']?['resourceId']?['videoId'];
+            if (videoId != null) savedIds.add(videoId);
+          }
+          
+          // Grab the next page token. If it's null, the loop will break!
+          nextPageToken = data['nextPageToken'];
+        } else {
+          // If the API throws an error midway, stop looping and return what we have so far
+          print('BOP ERROR: Failed to fetch playlist page. Status Code: ${response.statusCode}');
+          break; 
+        }
+      } while (nextPageToken != null);
+      
+      return savedIds;
+    } catch (e) {
+      print('BOP EXCEPTION: Failed to paginate through playlist: $e');
+      return savedIds;
+    }
+  }
+  
+  // Save router (Handles Liked Music AND Custom Playlists)
+  Future<bool> saveSong(String videoId, String targetPlaylistId) async {
+    // If they selected the default "Liked Music", route to our original likeVideo method
+    if (targetPlaylistId == 'LIKED_MUSIC') {
+      return await likeVideo(videoId);
+    }
+
+    // Otherwise, do a POST request to add it to their custom playlist
+    try {
+      String? token = await _storage.read(key: 'youtube_access_token');
+      if (token == null) return false;
+
+      Set<String> existingIds = await _getAlreadyInPlaylistIds(targetPlaylistId, token);
+      if (existingIds.contains(videoId)) {
+        print('BOP: Song is already in this playlist! Preventing duplicate.');
+        return true; 
+      }
+
+      final url = Uri.parse('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet');
+      final body = json.encode({
+        'snippet': {
+          'playlistId': targetPlaylistId,
+          'resourceId': {
+            'kind': 'youtube#video',
+            'videoId': videoId
+          }
+        }
+      });
+
+      var response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: body,
+      );
+
+      // Catch Expired Token & Retry
+      if (response.statusCode == 401) {
+        print('BOP: Token expired! Refreshing...');
+        token = await _refreshToken();
+        
+        if (token != null) {
+          response = await http.post(
+            url,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          );
+        }
+      }
+
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      print('BOP EXCEPTION: Failed to add to custom playlist: $e');
+      return false;
+    }
+  }
+
+  Future<FetchResults> fetchTrendingMusic({String? pageToken, String targetPlaylistId = 'LIKED_MUSIC'}) async {
     try {
       String? token = await _storage.read(key: 'youtube_access_token');
       if (token == null) return FetchResults(songs: []);
 
-      String targetPlaylistId = _getRegionalPlaylistId();
+      String chartPlaylistId = _getRegionalPlaylistId();
 
-      String urlString = 'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=$targetPlaylistId&maxResults=50';
+      String urlString = 'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=$chartPlaylistId&maxResults=50';
       if (pageToken != null) {
         urlString += '&pageToken=${Uri.encodeComponent(pageToken)}';
       }
@@ -269,12 +410,15 @@ class YoutubeService {
           final currentToken = await _storage.read(key: 'youtube_access_token');
 
           if (currentToken != null) {
-            Set<String> alreadyLikedIds = await _getAlreadyLikedIds(
-              fetchedSongs.map((s) => s.id).toList(),
-              currentToken
-            );
+            Set<String> alreadySavedIds;
 
-            fetchedSongs.removeWhere((song) => alreadyLikedIds.contains(song.id));
+            if (targetPlaylistId == 'LIKED_MUSIC') {
+              alreadySavedIds = await _getAlreadyLikedIds(fetchedSongs.map((s) => s.id).toList(), currentToken);
+            } else {
+              alreadySavedIds = await _getAlreadyInPlaylistIds(targetPlaylistId, currentToken);
+            }
+
+            fetchedSongs.removeWhere((song) => alreadySavedIds.contains(song.id));
           }
         }
 

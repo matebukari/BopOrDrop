@@ -4,6 +4,7 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import 'dart:async';
 
 import '../../models/song_model.dart';
+import '../../models/playlist_model.dart';
 import '../../services/youtube_service.dart';
 import 'widgets/song_card.dart';
 import 'widgets/swipe_controls.dart';
@@ -33,6 +34,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   bool _isDeckEmpty = false;
 
+  List<PlaylistModel> _myPlaylists = [];
+  String _selectedDestinationId = 'LIKED_MUSIC';
+
   @override
   void initState() {
     super.initState();
@@ -45,12 +49,23 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         origin: 'https://www.youtube-nocookie.com',
       ),
     );
+    _initializeData();
+  }
 
+  Future<void> _initializeData() async {
+    // 1. Fetch their personal playlists for the dropdown
+    final playlists = await _youtubeService.fetchMyPlaylists();
+    if (mounted) {
+      setState(() {
+        _myPlaylists = playlists;
+      });
+    }
+    // 2. Load the initial deck
     _loadTrendingMusic();
   }
 
   Future<void> _loadTrendingMusic() async {
-    final results = await _youtubeService.fetchTrendingMusic();
+    final results = await _youtubeService.fetchTrendingMusic(targetPlaylistId: _selectedDestinationId);
 
     if (mounted) {
       setState(() {
@@ -81,7 +96,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       _isFetchingMore = true;
     });
 
-    final result = await _youtubeService.fetchTrendingMusic(pageToken: _nextPageToken);
+    final result = await _youtubeService.fetchTrendingMusic(pageToken: _nextPageToken, targetPlaylistId: _selectedDestinationId);
 
     if (mounted) {
       setState(() {
@@ -124,6 +139,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   void _togglePlayPause() {
+    if (_isLoading || _liveSongs.isEmpty || _isDeckEmpty) return;
+
     if (_isPlaying) {
       _ytController.pauseVideo();
       setState(() => _isPlaying = false);
@@ -140,7 +157,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
     final swipedSong = _liveSongs[previousIndex];
 
-    if (direction == CardSwiperDirection.right) _youtubeService.likeVideo(swipedSong.id);
+    if (direction == CardSwiperDirection.right) _youtubeService.saveSong(swipedSong.id, _selectedDestinationId);
 
     if (currentIndex != null) {
       // If the user is 5 cards away from the end of the deck, go fetch more!
@@ -177,7 +194,35 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Discover', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: _selectedDestinationId,
+            dropdownColor: const Color(0xFF1E1E1E),
+            icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            items: [
+              // The default "Liked Music" option
+              const DropdownMenuItem(
+                value: 'LIKED_MUSIC',
+                child: Text('Liked Music'),
+              ),
+              // Map their actual YouTube playlists
+              ..._myPlaylists.map((playlist) {
+                return DropdownMenuItem(
+                  value: playlist.id,
+                  child: Text(playlist.title),
+                );
+              }),
+            ],
+            onChanged: (String? newValue) {
+              if (newValue != null && newValue != _selectedDestinationId) {
+                setState(() {
+                  _selectedDestinationId = newValue;
+                });
+              }
+            },
+          ),
+        ),
         centerTitle: true,
       ),
       body: SafeArea(
