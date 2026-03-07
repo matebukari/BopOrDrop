@@ -4,6 +4,7 @@ class SwipeControls extends StatelessWidget{
   final VoidCallback onDrop;
   final VoidCallback onBop;
   final VoidCallback onPlayPause;
+  final VoidCallback onUndo;
   final bool isPlaying;
 
   const SwipeControls({
@@ -12,6 +13,7 @@ class SwipeControls extends StatelessWidget{
     required this.onBop,
     required this.onPlayPause,
     required this.isPlaying,
+    required this.onUndo
   });
 
   @override
@@ -19,6 +21,11 @@ class SwipeControls extends StatelessWidget{
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
+        IconButton(
+          onPressed: onUndo,
+          icon: const Icon(Icons.replay, color: Colors.orangeAccent),
+          iconSize: 32,
+        ),
         FloatingActionButton(
           heroTag: 'drop',
           onPressed: onDrop,

@@ -317,13 +317,32 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                             cardsCount: _liveSongs.length,
                             isLoop: false,
                             onEnd: () {
-                              setState(() {
-                                _isDeckEmpty = true;
-                              });
+                              setState(() => _isDeckEmpty = true);
                               _ytController.pauseVideo();
                               _playbackTimer?.cancel();
                             },                            
                             onSwipe: _onSwipe,
+                            onUndo: (previousIndex, currentIndex, direction) {
+                              if (currentIndex < _liveSongs.length) {
+                                _currentVideoId = _liveSongs[currentIndex].id;
+                                _loadAndPlayPreview(_currentVideoId);
+
+                                if (direction == CardSwiperDirection.right) {
+                                  // They are undoing a save! Delete it from YouTube.
+                                  _youtubeService.unsaveSong(_currentVideoId, _selectedDestinationId);
+                                  print('BOP: Reversing YouTube Save...');
+                                } else if (direction == CardSwiperDirection.left) {
+                                  // They are undoing a drop! Remove it from local memory.
+                                  _youtubeService.undropSong(_currentVideoId);
+                                  print('BOP: Reversing Local Drop...');
+                                }
+                                                                
+                                if (_isDeckEmpty) {
+                                  setState(() => _isDeckEmpty = false);
+                                }
+                              }
+                              return true;
+                            },
                             allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
                             cardBuilder: (context, index, percentX, percentY) {
                               return SongCard(song: _liveSongs[index]); 
@@ -338,6 +357,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     onDrop: () => _swiperController.swipe(CardSwiperDirection.left),
                     onBop: () => _swiperController.swipe(CardSwiperDirection.right),
                     onPlayPause: _togglePlayPause,
+                    onUndo: () => _swiperController.undo(),
                   ),
                   const SizedBox(height: 40),
                 ],

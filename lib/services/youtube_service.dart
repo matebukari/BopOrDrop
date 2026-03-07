@@ -339,6 +339,63 @@ class YoutubeService {
     }
   }
 
+  Future<bool> unsaveSong(String videoId, String targetPlaylistId) async {
+    if (targetPlaylistId == 'LIKED_MUSIC') {
+      return await _removeLike(videoId);
+    } else {
+      return await _removeFromCustomPlaylist(videoId, targetPlaylistId);
+    }
+  }
+
+  // Remove from Liked Videos
+  Future<bool> _removeLike(String videoId) async {
+    try {
+      String? token = await _storage.read(key: 'youtube_access_token');
+      if (token == null) return false;
+
+      final url = Uri.parse('https://www.googleapis.com/youtube/v3/videos/rate?id=$videoId&rating=none');
+      var response = await http.post(url, headers: {'Authorization': 'Bearer $token'});
+      
+      if (response.statusCode == 401) {
+        token = await _refreshToken();
+        if (token != null) response = await http.post(url, headers: {'Authorization': 'Bearer $token'});
+      }
+      return response.statusCode == 204;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 2. Remove from Custom Playlist
+  Future<bool> _removeFromCustomPlaylist(String videoId, String playlistId) async {
+    try {
+      String? token = await _storage.read(key: 'youtube_access_token');
+      if (token == null) return false;
+
+      // Find the specific Item ID of the song inside the playlist
+      final searchUrl = Uri.parse('https://www.googleapis.com/youtube/v3/playlistItems?part=id&playlistId=$playlistId&videoId=$videoId');
+      var searchResponse = await http.get(searchUrl, headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'});
+      
+      if (searchResponse.statusCode == 200) {
+        final data = json.decode(searchResponse.body);
+        final items = data['items'] ?? [];
+        if (items.isEmpty) return true; // It's not in the playlist anyway!
+
+        // Grab the unique ID for this specific playlist entry
+        final playlistItemId = items[0]['id'];
+
+        // Send the DELETE request
+        final deleteUrl = Uri.parse('https://www.googleapis.com/youtube/v3/playlistItems?id=$playlistItemId');
+        var deleteResponse = await http.delete(deleteUrl, headers: {'Authorization': 'Bearer $token'});
+        
+        return deleteResponse.statusCode == 204;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   //Gets the list of IDs the user has swiped left on
   Future<Set<String>> _getDroppedSongIds() async {
     try {
@@ -359,6 +416,19 @@ class YoutubeService {
       print('BOP: Song dropped and remembered locally!');
     } catch (e) {
       print('BOP EXCEPTION: Failed to save dropped song: $e');
+    }
+  }
+
+  // Removes a song from the local drop list if they undo!
+  Future<void> undropSong(String videoId) async {
+    try {
+      Set<String> droppedIds = await _getDroppedSongIds();
+      if (droppedIds.remove(videoId)) {
+        await _storage.write(key: 'dropped_songs', value: droppedIds.join(','));
+        print('BOP: Song undropped from local memory!');
+      }
+    } catch (e) {
+      print('BOP EXCEPTION: Failed to undrop song: $e');
     }
   }
   
