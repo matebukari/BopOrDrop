@@ -9,6 +9,8 @@ import '../../models/playlist_model.dart';
 import '../../services/youtube_service.dart';
 import 'widgets/song_card.dart';
 import 'widgets/swipe_controls.dart';
+import 'widgets/discover_header.dart';
+import 'widgets/empty_deck_view.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -66,6 +68,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Future<void> _initializeData() async {
+    // Read their saved preference!
     String? savedPlaylistId = await _storage.read(key: 'preferred_save_destination');
     if (savedPlaylistId != null) {
       _selectedDestinationId = savedPlaylistId;
@@ -99,7 +102,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       }
 
       if (_liveSongs.length < 15 && _nextPageToken != null) {
-        print('BOP: Initial deck too small after filtering! Auto-fetching more...');
         _fetchMoreMusic();
       }
     }
@@ -109,7 +111,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Future<void> _fetchMoreMusic() async {
     if (_isFetchingMore || _nextPageToken == null) return;
 
-    print('BOP: Running low on cards! Fetching more secretly in the background...');
     setState(() {
       _isFetchingMore = true;
     });
@@ -122,11 +123,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         _nextPageToken = result.nextPageToken;
         _isFetchingMore = false;
       });
-      print('BOP: Added ${result.songs.length} new cards. Deck size is now ${_liveSongs.length}!');
     }
 
     if ((result.songs.isEmpty || _liveSongs.length < 15) && _nextPageToken != null) {
-      print('BOP: Deck still needs more cards, fetching next page immediately!');
       _fetchMoreMusic();
     }
   }
@@ -182,7 +181,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
 
     if (currentIndex != null) {
-      // If the user is 5 cards away from the end of the deck, go fetch more!
+      // If the user is 10 cards away from the end of the deck, go fetch more!
       if (currentIndex >= _liveSongs.length - 10) {
         _fetchMoreMusic();
       }
@@ -202,6 +201,60 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     return true;
   }
 
+  bool _onUndo(int? previousIndex, int currentIndex, CardSwiperDirection direction) {
+    if (currentIndex < _liveSongs.length) {
+      _currentVideoId = _liveSongs[currentIndex].id;
+      _loadAndPlayPreview(_currentVideoId);
+
+      // Undo Router
+      if (direction == CardSwiperDirection.right) {
+        _youtubeService.unsaveSong(_currentVideoId, _selectedDestinationId);
+      } else if (direction == CardSwiperDirection.left) {
+        _youtubeService.undropSong(_currentVideoId);
+      }
+
+      if (_isDeckEmpty) {
+        setState(() => _isDeckEmpty = false);
+      }
+    }
+    return true;
+  }
+
+  Future<void> _onDestinationChanged(String? newValue) async {
+    if (newValue != null && newValue != _selectedDestinationId) {
+      // Save their choice to the phone's memory permanently
+      await _storage.write(key: 'preferred_save_destination', value: newValue);
+
+      setState(() {
+        _selectedDestinationId = newValue;
+      });
+    }
+  }
+
+  void _onDeckEmpty() {
+    setState(() => _isDeckEmpty = true);
+    _ytController.pauseVideo();
+    _playbackTimer?.cancel();
+  }
+  
+  Widget _buildBottomControls() {
+    if (_isDeckEmpty || _liveSongs.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        const SizedBox(height: 20),
+        SwipeControls(
+          isPlaying: _isPlaying,
+          onDrop: () => _swiperController.swipe(CardSwiperDirection.left),
+          onBop: () => _swiperController.swipe(CardSwiperDirection.right),
+          onPlayPause: _togglePlayPause,
+          onUndo: () => _swiperController.undo(),
+        ),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+  
   @override
   void dispose() {
     _playbackTimer?.cancel();
@@ -236,16 +289,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 );
               }),
             ],
-            onChanged: (String? newValue) async {
-              if (newValue != null && newValue != _selectedDestinationId) {
-
-                await _storage.write(key: 'preferred_save_destination', value: newValue);
-
-                setState(() {
-                  _selectedDestinationId = newValue;
-                });
-              }
-            },
+            onChanged: _onDestinationChanged,
           ),
         ),
         centerTitle: true,
@@ -259,108 +303,32 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ),
             Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'BopOrDrop',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.library_music, color: Colors.grey[400], size: 16),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Saving to $_selectedPlaylistName on YouTube',
-                            style: TextStyle(
-                              color: Colors.grey[400], 
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                
+                DiscoverHeader(playlistName: _selectedPlaylistName),
+
                 const SizedBox(height: 10),
+
                 Expanded(
                   child: _isLoading
                     ? const Center(child: CircularProgressIndicator(color: Colors.greenAccent))
                     : _isDeckEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.check_circle_outline, size: 80, color: Colors.greenAccent[400]),
-                              const SizedBox(height: 20),
-                              const Text(
-                                "You're all caught up!", 
-                                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                "Check back later for more music.", 
-                                style: TextStyle(color: Colors.grey[400], fontSize: 16),
-                              ),
-                            ],
-                          ),
-                        )
+                      ? const EmptyDeckView()
                       : _liveSongs.isEmpty
                         ? const Center(child: Text("No songs found.", style: TextStyle(color: Colors.white)))
                         : CardSwiper(
                             controller: _swiperController,
                             cardsCount: _liveSongs.length,
+                            numberOfCardsDisplayed: _liveSongs.length == 1 ? 1 : 2,
                             isLoop: false,
-                            onEnd: () {
-                              setState(() => _isDeckEmpty = true);
-                              _ytController.pauseVideo();
-                              _playbackTimer?.cancel();
-                            },                            
+                            onEnd: _onDeckEmpty,                            
                             onSwipe: _onSwipe,
-                            onUndo: (previousIndex, currentIndex, direction) {
-                              if (currentIndex < _liveSongs.length) {
-                                _currentVideoId = _liveSongs[currentIndex].id;
-                                _loadAndPlayPreview(_currentVideoId);
-
-                                if (direction == CardSwiperDirection.right) {
-                                  // They are undoing a save! Delete it from YouTube.
-                                  _youtubeService.unsaveSong(_currentVideoId, _selectedDestinationId);
-                                  print('BOP: Reversing YouTube Save...');
-                                } else if (direction == CardSwiperDirection.left) {
-                                  // They are undoing a drop! Remove it from local memory.
-                                  _youtubeService.undropSong(_currentVideoId);
-                                  print('BOP: Reversing Local Drop...');
-                                }
-                                                                
-                                if (_isDeckEmpty) {
-                                  setState(() => _isDeckEmpty = false);
-                                }
-                              }
-                              return true;
-                            },
+                            onUndo: _onUndo,
                             allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
                             cardBuilder: (context, index, percentX, percentY) {
                               return SongCard(song: _liveSongs[index]); 
                             },
                           ),
                 ),
-                
-                if (!_isDeckEmpty && _liveSongs.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  SwipeControls(
-                    isPlaying: _isPlaying,
-                    onDrop: () => _swiperController.swipe(CardSwiperDirection.left),
-                    onBop: () => _swiperController.swipe(CardSwiperDirection.right),
-                    onPlayPause: _togglePlayPause,
-                    onUndo: () => _swiperController.undo(),
-                  ),
-                  const SizedBox(height: 40),
-                ],
+                _buildBottomControls(),
               ],
             ),
           ],
