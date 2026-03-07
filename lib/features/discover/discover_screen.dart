@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
@@ -17,6 +18,7 @@ class DiscoverScreen extends StatefulWidget {
 }
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
+  final _storage = const FlutterSecureStorage();
   final CardSwiperController _swiperController = CardSwiperController();
   final YoutubeService _youtubeService = YoutubeService();
   late YoutubePlayerController _ytController;
@@ -64,14 +66,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Future<void> _initializeData() async {
-    // 1. Fetch their personal playlists for the dropdown
+    String? savedPlaylistId = await _storage.read(key: 'preferred_save_destination');
+    if (savedPlaylistId != null) {
+      _selectedDestinationId = savedPlaylistId;
+    }
+
+    // Fetch their personal playlists for the dropdown
     final playlists = await _youtubeService.fetchMyPlaylists();
     if (mounted) {
       setState(() {
         _myPlaylists = playlists;
       });
     }
-    // 2. Load the initial deck
+    // Load the initial deck
     _loadTrendingMusic();
   }
 
@@ -168,7 +175,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
     final swipedSong = _liveSongs[previousIndex];
 
-    if (direction == CardSwiperDirection.right) _youtubeService.saveSong(swipedSong.id, _selectedDestinationId);
+    if (direction == CardSwiperDirection.right) {
+      _youtubeService.saveSong(swipedSong.id, _selectedDestinationId);
+    } else if (direction == CardSwiperDirection.left) {
+      _youtubeService.dropSong(swipedSong.id);
+    }
 
     if (currentIndex != null) {
       // If the user is 5 cards away from the end of the deck, go fetch more!
@@ -225,8 +236,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 );
               }),
             ],
-            onChanged: (String? newValue) {
+            onChanged: (String? newValue) async {
               if (newValue != null && newValue != _selectedDestinationId) {
+
+                await _storage.write(key: 'preferred_save_destination', value: newValue);
+
                 setState(() {
                   _selectedDestinationId = newValue;
                 });

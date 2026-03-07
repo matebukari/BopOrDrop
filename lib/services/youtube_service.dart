@@ -339,6 +339,29 @@ class YoutubeService {
     }
   }
 
+  //Gets the list of IDs the user has swiped left on
+  Future<Set<String>> _getDroppedSongIds() async {
+    try {
+      String? droppedString = await _storage.read(key: 'dropped_songs');
+      if (droppedString == null || droppedString.isEmpty) return {};
+      return droppedString.split(',').toSet();
+    } catch (e) {
+      return {};
+    }
+  }
+
+  // Saves a new ID to the drop list
+  Future<void> dropSong(String videoId) async {
+    try {
+      Set<String> droppedIds = await _getDroppedSongIds();
+      droppedIds.add(videoId);
+      await _storage.write(key: 'dropped_songs', value: droppedIds.join(','));
+      print('BOP: Song dropped and remembered locally!');
+    } catch (e) {
+      print('BOP EXCEPTION: Failed to save dropped song: $e');
+    }
+  }
+  
   Future<FetchResults> fetchTrendingMusic({String? pageToken, String targetPlaylistId = 'LIKED_MUSIC'}) async {
     try {
       String? token = await _storage.read(key: 'youtube_access_token');
@@ -421,6 +444,10 @@ class YoutubeService {
             fetchedSongs.removeWhere((song) => alreadySavedIds.contains(song.id));
           }
         }
+
+        // Filter out songs the user previously swiped left on!
+        Set<String> droppedIds = await _getDroppedSongIds();
+        fetchedSongs.removeWhere((song) => droppedIds.contains(song.id));
 
         print('BOP SUCCESS: Fetched ${fetchedSongs.length} trending songs!');
         return FetchResults(songs: fetchedSongs, nextPageToken: nextToken);
