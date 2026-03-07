@@ -36,6 +36,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   List<PlaylistModel> _myPlaylists = [];
   String _selectedDestinationId = 'LIKED_MUSIC';
+  String get _selectedPlaylistName {
+    if (_selectedDestinationId == 'LIKED_MUSIC') {
+      return '"Liked Music"';
+    }
+    try {
+      final playlist = _myPlaylists.firstWhere((p) => p.id == _selectedDestinationId);
+      return '"${playlist.title}"';
+    } catch (e) {
+      return 'selected playlist';
+    }
+  }
 
   @override
   void initState() {
@@ -249,7 +260,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           Icon(Icons.library_music, color: Colors.grey[400], size: 16),
                           const SizedBox(width: 6),
                           Text(
-                            'Saving to "Liked Music" on YouTube',
+                            'Saving to $_selectedPlaylistName on YouTube',
                             style: TextStyle(
                               color: Colors.grey[400], 
                               fontSize: 14,
