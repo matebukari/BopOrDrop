@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../discover/discover_screen.dart';
+import '../library/library_screen.dart';
 import '../profile/profile_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -22,10 +23,7 @@ class _MainScreenState extends State<MainScreen> {
       
     const DiscoverScreen(),
     
-    const Center(
-      child: Text('Library Screen\n(Coming Soon)', 
-      textAlign: TextAlign.center, 
-      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))),
+    const LibraryScreen(),
       
     const ProfileScreen(),
   ];
