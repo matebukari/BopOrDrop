@@ -175,7 +175,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final swipedSong = _liveSongs[previousIndex];
 
     if (direction == CardSwiperDirection.right) {
-      _youtubeService.saveSong(swipedSong.id, _selectedDestinationId);
+      _youtubeService.saveSong(swipedSong, _selectedDestinationId);
     } else if (direction == CardSwiperDirection.left) {
       _youtubeService.dropSong(swipedSong.id);
     }

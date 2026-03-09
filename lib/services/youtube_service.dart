@@ -159,13 +159,38 @@ class YoutubeService {
       return savedIds;
     }
   }
+
+  Future<List<SongModel>> getLocalBoppedSongs() async {
+    try {
+      String? boppedString = await _storage.read(key: 'bopped_songs');
+      if (boppedString == null || boppedString.isEmpty) return [];
+      
+      List<dynamic> jsonList = json.decode(boppedString);
+      return jsonList.map((json) => SongModel.fromJson(json)).toList();
+    } catch (e) {
+      return [];
+    }
+  }
   
-  Future<bool> saveSong(String videoId, String targetPlaylistId) async {
-    if (targetPlaylistId == 'LIKED_MUSIC') return await likeVideo(videoId);
+  Future<bool> saveSong(SongModel song, String targetPlaylistId) async {
+    // Save locally for the app's Library
+    try {
+      List<SongModel> currentBops = await getLocalBoppedSongs();
+      // Prevent duplicates
+      if (!currentBops.any((s) => s.id == song.id)) {
+        currentBops.add(song);
+        await _storage.write(key: 'bopped_songs', value: json.encode(currentBops.map((s) => s.toJson()).toList()));
+      }
+    } catch (e) {
+      print('BOP ERROR: Failed to save locally');
+    }
+
+    // Save to YouTube API
+    if (targetPlaylistId == 'LIKED_MUSIC') return await likeVideo(song.id);
 
     try {
       Set<String> existingIds = await _getAlreadyInPlaylistIds(targetPlaylistId);
-      if (existingIds.contains(videoId)) {
+      if (existingIds.contains(song.id)) {
         return true; 
       }
 
@@ -173,7 +198,7 @@ class YoutubeService {
       final body = json.encode({
         'snippet': {
           'playlistId': targetPlaylistId,
-          'resourceId': {'kind': 'youtube#video', 'videoId': videoId}
+          'resourceId': {'kind': 'youtube#video', 'videoId': song.id}
         }
       });
 
@@ -194,6 +219,16 @@ class YoutubeService {
   }
 
   Future<bool> unsaveSong(String videoId, String targetPlaylistId) async {
+    // 1. Remove locally
+    try {
+      List<SongModel> currentBops = await getLocalBoppedSongs();
+      currentBops.removeWhere((s) => s.id == videoId);
+      await _storage.write(key: 'bopped_songs', value: json.encode(currentBops.map((s) => s.toJson()).toList()));
+    } catch (e) {
+      print('BOP ERROR: Failed to remove locally');
+    }
+
+    // 2. Remove from YouTube API
     if (targetPlaylistId == 'LIKED_MUSIC') {
       return await _removeLike(videoId);
     } else {
