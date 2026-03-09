@@ -279,34 +279,44 @@ class YoutubeService {
 
   // Manage Drops in loacalstorage
   
-  Future<Set<String>> _getDroppedSongIds() async {
+  Future<List<SongModel>> getLocalDroppedSongs() async {
     try {
       String? droppedString = await _storage.read(key: 'dropped_songs');
-      if (droppedString == null || droppedString.isEmpty) return {};
-      return droppedString.split(',').toSet();
+      if (droppedString == null || droppedString.isEmpty) return [];
+
+      List<dynamic> jsonList = json.decode(droppedString);
+      return jsonList.map((json) => SongModel.fromJson(json)).toList();
     } catch (e) {
-      return {};
+      return [];
     }
   }
 
-  Future<void> dropSong(String videoId) async {
+  Future<void> dropSong(SongModel song) async {
     try {
-      Set<String> droppedIds = await _getDroppedSongIds();
-      droppedIds.add(videoId);
-      await _storage.write(key: 'dropped_songs', value: droppedIds.join(','));
+      List<SongModel> currentDrops = await getLocalDroppedSongs();
+      if (!currentDrops.any((s) => s.id == song.id)) {
+        currentDrops.add(song);
+        await _storage.write(key: 'dropped_songs', value: json.encode(currentDrops.map((s) => s.toJson()).toList()));
+        print('BOP: Song dropped and remembered locally!');
+      }
     } catch (e) {
-      return;
+      print('BOP EXCEPTION: Failed to save dropped song: $e');
     }
   }
 
   Future<void> undropSong(String videoId) async {
     try {
-      Set<String> droppedIds = await _getDroppedSongIds();
-      if (droppedIds.remove(videoId)) {
-        await _storage.write(key: 'dropped_songs', value: droppedIds.join(','));
+      List<SongModel> currentDrops = await getLocalDroppedSongs();
+      int initialLength = currentDrops.length;
+      
+      currentDrops.removeWhere((s) => s.id == videoId);
+      
+      if (currentDrops.length < initialLength) {
+        await _storage.write(key: 'dropped_songs', value: json.encode(currentDrops.map((s) => s.toJson()).toList()));
+        print('BOP: Song undropped from local memory!');
       }
     } catch (e) {
-      return;
+      print('BOP EXCEPTION: Failed to undrop song: $e');
     }
   }
   
@@ -403,7 +413,8 @@ class YoutubeService {
         }
 
         // Filter out locally dropped songs
-        Set<String> droppedIds = await _getDroppedSongIds();
+        List<SongModel> droppedSongs = await getLocalDroppedSongs();
+        Set<String> droppedIds = droppedSongs.map((s) => s.id).toSet();
         fetchedSongs.removeWhere((song) => droppedIds.contains(song.id));
 
         return FetchResults(songs: fetchedSongs, nextPageToken: nextToken);
