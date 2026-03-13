@@ -3,6 +3,7 @@ import '../../models/playlist_model.dart';
 import '../../services/youtube_service.dart';
 import 'bopped/bopped_screen.dart';
 import 'dropped/dropped_screen.dart';
+import 'playlist_detail_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -25,10 +26,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _fetchPlaylists() async {
     final playlists = await _youtubeService.fetchMyPlaylists();
-    final likedMusic = PlaylistModel(id: 'LIKED_MUSIC', title: 'Liked Music');
     if (mounted) {
       setState(() {
-        _playlists = [likedMusic, ...playlists];
+        _playlists = playlists;
         _isLoading = false;
       });
     }
@@ -220,7 +220,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               color: Colors.grey,
                             ),
                             onTap: () {
-                              // Future feature: Navigate to a screen showing songs in THIS playlist!
+                              Navigator.push(
+                                context, 
+                                MaterialPageRoute(
+                                  builder: (context) => PlaylistDetailScreen(playlist: playlist),
+                                ),
+                              );
                             },
                           ),
                         );
