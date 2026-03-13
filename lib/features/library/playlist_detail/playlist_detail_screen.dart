@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../models/playlist_model.dart';
-import '../../models/song_model.dart';
-import '../../services/youtube_service.dart';
+import '../../../models/playlist_model.dart';
+import '../../../models/song_model.dart';
+import '../../../services/youtube_service.dart';
 
 class PlaylistDetailScreen extends StatefulWidget {
   final PlaylistModel playlist;
