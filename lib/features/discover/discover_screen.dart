@@ -75,7 +75,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
 
     // Fetch their personal playlists for the dropdown
-    final playlists = await _youtubeService.fetchMyPlaylists();
+    final playlists = await _youtubeService.fetchUserPlaylists();
     if (mounted) {
       setState(() {
         _myPlaylists = playlists;

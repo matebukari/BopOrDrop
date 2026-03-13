@@ -120,7 +120,7 @@ class YoutubeService {
     }
   }
 
-  Future<List<PlaylistModel>> fetchMyPlaylists() async {
+  Future<List<PlaylistModel>> fetchUserPlaylists() async {
     try {
       final url = Uri.parse(
         'https://www.googleapis.com/youtube/v3/playlists?part=snippet&mine=true&maxResults=50',

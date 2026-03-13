@@ -25,7 +25,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _fetchPlaylists() async {
-    final playlists = await _youtubeService.fetchMyPlaylists();
+    final playlists = await _youtubeService.fetchUserPlaylists();
     if (mounted) {
       setState(() {
         _playlists = playlists;
