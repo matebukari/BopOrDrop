@@ -186,7 +186,10 @@ class YoutubeService {
     try {
       List<SongModel> currentBops = await getLocalBoppedSongs();
       if (!currentBops.any((s) => s.id == song.id)) {
-        currentBops.add(song);
+        // Clone the song and attach the playlist ID!
+        final songWithPlaylistId = song.copyWith(savedPlaylistId: targetPlaylistId);
+        
+        currentBops.add(songWithPlaylistId);
         await _storage.write(
           key: 'bopped_songs',
           value: json.encode(currentBops.map((s) => s.toJson()).toList()),

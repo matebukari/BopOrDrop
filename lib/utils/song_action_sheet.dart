@@ -6,7 +6,9 @@ class SongActionSheet {
   static void show({
     required BuildContext context,
     required SongModel song,
-    required VoidCallback onRemove,
+    required VoidCallback onAction,
+    String actionText = 'Remove from Playlist',
+    IconData actionIcon = Icons.delete_outline,
   }) {
     showModalBottomSheet(
       context: context,
@@ -86,11 +88,11 @@ class SongActionSheet {
 
                 // Remove from Playlist
                 ListTile(
-                  leading: const Icon(Icons.delete_outline, color: Colors.grey, size: 28),
-                  title: const Text('Remove from Playlist', style: TextStyle(color: Colors.white, fontSize: 16)),
+                  leading: Icon(actionIcon, color: Colors.grey, size: 28),
+                  title: Text(actionText, style: const TextStyle(color: Colors.white, fontSize: 16)),
                   onTap: () {
                     Navigator.pop(context);
-                    onRemove();
+                    onAction();
                   },
                 ),
               ],

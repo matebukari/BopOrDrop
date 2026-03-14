@@ -155,7 +155,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                         SongActionSheet.show(
                           context: context, 
                           song: song, 
-                          onRemove: () => _removeSong(song),
+                          onAction: () => _removeSong(song),
                         );
                       },
                       contentPadding: const EdgeInsets.all(8.0),
