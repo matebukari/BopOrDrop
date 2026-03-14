@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../models/playlist_model.dart';
 import '../../../models/song_model.dart';
 import '../../../services/youtube_service.dart';
+import '../../../utils/song_action_sheet.dart';
 
 class PlaylistDetailScreen extends StatefulWidget {
   final PlaylistModel playlist;
@@ -55,6 +56,28 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
         _nextPageToken = results.nextPageToken;
         _isFetchingMore = false;
       });
+    }
+  }
+
+  Future<void> _removeSong(SongModel song) async {
+    // Loading snackbar
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Removing ${song.title}...'), duration: const Duration(seconds: 1)),
+    );
+
+    final success = await _youtubeService.unsaveSong(song.id, widget.playlist.id);
+
+    if (success && mounted) {
+      setState(() {
+        _songs.removeWhere((s) => s.id == song.id); 
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Song removed successfully.'), backgroundColor: Colors.green),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to remove song.'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -128,6 +151,13 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: ListTile(
+                      onTap: () {
+                        SongActionSheet.show(
+                          context: context, 
+                          song: song, 
+                          onRemove: () => _removeSong(song),
+                        );
+                      },
                       contentPadding: const EdgeInsets.all(8.0),
                       leading: ClipRRect(
                         borderRadius: BorderRadius.circular(8.0),
