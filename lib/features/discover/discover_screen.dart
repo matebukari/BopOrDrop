@@ -2,6 +2,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 
 import '../../models/song_model.dart';
@@ -236,6 +237,20 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     _ytController.pauseVideo();
     _playbackTimer?.cancel();
   }
+
+  Future<void> _openInYouTube() async {
+    if (_currentVideoId.isEmpty) return;
+
+    // Pause the app's preview since they are leaving the app
+    if (_isPlaying) {
+      _togglePlayPause();
+    }
+
+    final url = Uri.parse('https://www.youtube.com/watch?v=$_currentVideoId');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
   
   Widget _buildBottomControls() {
     if (_isDeckEmpty || _liveSongs.isEmpty) return const SizedBox.shrink();
@@ -249,6 +264,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           onBop: () => _swiperController.swipe(CardSwiperDirection.right),
           onPlayPause: _togglePlayPause,
           onUndo: () => _swiperController.undo(),
+          onOpenYouTube: _openInYouTube,
         ),
         const SizedBox(height: 40),
       ],

@@ -5,6 +5,7 @@ class SwipeControls extends StatelessWidget{
   final VoidCallback onBop;
   final VoidCallback onPlayPause;
   final VoidCallback onUndo;
+  final VoidCallback onOpenYouTube;
   final bool isPlaying;
 
   const SwipeControls({
@@ -13,7 +14,8 @@ class SwipeControls extends StatelessWidget{
     required this.onBop,
     required this.onPlayPause,
     required this.isPlaying,
-    required this.onUndo
+    required this.onUndo,
+    required this.onOpenYouTube,
   });
 
   @override
@@ -55,6 +57,11 @@ class SwipeControls extends StatelessWidget{
             size: 30,
             color: Colors.white,
           ),
+        ),
+        IconButton(
+          onPressed: onOpenYouTube, 
+          icon: const Icon(Icons.ondemand_video, color: Colors.redAccent),
+          iconSize: 32,
         ),
       ],
     );
