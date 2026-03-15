@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/song_model.dart';
@@ -15,6 +16,26 @@ class FetchResults {
 
 class YoutubeService {
   final _storage = const FlutterSecureStorage();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+
+  Future<String?> get _getUserId async {
+    String? id = await _storage.read(key: 'youtube_user_id');
+    
+    // Fallback: if we don't have it saved, quietly ask Google for it
+    if (id == null) {
+      try {
+        final account = await GoogleSignIn.instance.attemptLightweightAuthentication();
+        if (account != null) {
+          id = account.id;
+          await _storage.write(key: 'youtube_user_id', value: id);
+        }
+      } catch (e) {
+        print('BOP ERROR: Could not fetch Google ID');
+      }
+    }
+    return id;
+  }
 
   // ==========================================
   // --- AUTHENTICATION & NETWORKING ---
@@ -182,21 +203,20 @@ class YoutubeService {
   }
 
   Future<bool> saveSong(SongModel song, String targetPlaylistId) async {
-    // 1. Save to local library
-    try {
-      List<SongModel> currentBops = await getLocalBoppedSongs();
-      if (!currentBops.any((s) => s.id == song.id)) {
-        // Clone the song and attach the playlist ID!
+    // 1. Save to Firebase Database
+    final userId = await _getUserId;
+    if (userId != null) {
+      try {
         final songWithPlaylistId = song.copyWith(savedPlaylistId: targetPlaylistId);
-        
-        currentBops.add(songWithPlaylistId);
-        await _storage.write(
-          key: 'bopped_songs',
-          value: json.encode(currentBops.map((s) => s.toJson()).toList()),
-        );
+        await _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('bopped_songs')
+            .doc(song.id)
+            .set(songWithPlaylistId.toJson());
+      } catch (e) {
+        print('BOP ERROR: Failed to save bop to Firebase: $e');
       }
-    } catch (e) {
-      return false;
     }
 
     // 2. Save to YouTube
@@ -226,23 +246,30 @@ class YoutubeService {
         ),
       );
 
+      print('BOP DEBUG: YouTube Save Status Code: ${response?.statusCode}');
+      print('BOP DEBUG: YouTube Save Response Body: ${response?.body}');
+
       return response?.statusCode == 200 || response?.statusCode == 201;
     } catch (e) {
+      print('BOP DEBUG: Crash inside saveSong: $e');
       return false;
     }
   }
 
   Future<bool> unsaveSong(String videoId, String targetPlaylistId) async {
-    // 1. Remove from local library
-    try {
-      List<SongModel> currentBops = await getLocalBoppedSongs();
-      currentBops.removeWhere((s) => s.id == videoId);
-      await _storage.write(
-        key: 'bopped_songs',
-        value: json.encode(currentBops.map((s) => s.toJson()).toList()),
-      );
-    } catch (e) {
-      return false;
+    // 1. Remove from Firebase Database
+    final userId = await _getUserId;
+    if (userId != null) {
+      try {
+        await _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('bopped_songs')
+            .doc(videoId)
+            .delete();
+      } catch (e) {
+        print('BOP ERROR: Failed to remove bop from Firebase: $e');
+      }
     }
 
     // 2. Remove from YouTube
@@ -384,63 +411,70 @@ class YoutubeService {
   }
 
   // ==========================================
-  // --- LOCAL STORAGE (BOPPED & DROPPED) ---
+  // --- FIREBASE CLOUD STORAGE (BOPPED & DROPPED) ---
   // ==========================================
 
-  Future<List<SongModel>> getLocalBoppedSongs() async {
+  Future<List<SongModel>> getFirebaseBoppedSongs() async {
+    final userId = await _getUserId;
+    if (userId == null) return [];
     try {
-      String? boppedString = await _storage.read(key: 'bopped_songs');
-      if (boppedString == null || boppedString.isEmpty) return [];
+      final snapshot = await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('bopped_songs')
+        .get();
 
-      List<dynamic> jsonList = json.decode(boppedString);
-      return jsonList.map((json) => SongModel.fromJson(json)).toList();
+      return snapshot.docs.map((doc) => SongModel.fromJson(doc.data())).toList();
     } catch (e) {
+      print('BOP ERROR: Failed to fetch bops from Firebase: $e');
       return [];
     }
   }
 
-  Future<List<SongModel>> getLocalDroppedSongs() async {
+  Future<List<SongModel>> getFirebaseDroppedSongs() async {
+    final userId = await _getUserId;
+    if (userId == null) return [];
     try {
-      String? droppedString = await _storage.read(key: 'dropped_songs');
-      if (droppedString == null || droppedString.isEmpty) return [];
+      final snapshot = await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('dropped_songs')
+        .get();
 
-      List<dynamic> jsonList = json.decode(droppedString);
-      return jsonList.map((json) => SongModel.fromJson(json)).toList();
+      return snapshot.docs.map((doc) => SongModel.fromJson(doc.data())).toList();
     } catch (e) {
+      print('BOP ERROR: Failed to fetch drops from Firebase: $e');
       return [];
     }
   }
 
   Future<void> dropSong(SongModel song) async {
+    final userId = await _getUserId;
+    if (userId == null) return;
     try {
-      List<SongModel> currentDrops = await getLocalDroppedSongs();
-      if (!currentDrops.any((s) => s.id == song.id)) {
-        currentDrops.add(song);
-        await _storage.write(
-          key: 'dropped_songs',
-          value: json.encode(currentDrops.map((s) => s.toJson()).toList()),
-        );
-      }
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('dropped_songs')
+          .doc(song.id)
+          .set(song.toJson());
     } catch (e) {
-      return;
+      print('BOP ERROR: Failed to save drop to Firebase: $e');
     }
   }
 
   Future<void> undropSong(String videoId) async {
+    final userId = await _getUserId;
+    if (userId == null) return;
     try {
-      List<SongModel> currentDrops = await getLocalDroppedSongs();
-      int initialLength = currentDrops.length;
-
-      currentDrops.removeWhere((s) => s.id == videoId);
-
-      if (currentDrops.length < initialLength) {
-        await _storage.write(
-          key: 'dropped_songs',
-          value: json.encode(currentDrops.map((s) => s.toJson()).toList()),
-        );
-      }
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('dropped_songs')
+          .doc(videoId)
+          .delete();
     } catch (e) {
-      return;
+      print('BOP ERROR: Failed to remove drop from Firebase: $e');
     }
   }
 
@@ -557,7 +591,7 @@ class YoutubeService {
         }
 
         // Filter out dropped songs
-        List<SongModel> droppedSongs = await getLocalDroppedSongs();
+        List<SongModel> droppedSongs = await getFirebaseDroppedSongs();
         Set<String> droppedIds = droppedSongs.map((s) => s.id).toSet();
         fetchedSongs.removeWhere((song) => droppedIds.contains(song.id));
 

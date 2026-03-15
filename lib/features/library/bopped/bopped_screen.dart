@@ -23,7 +23,7 @@ class _BoppedScreenState extends State<BoppedScreen> {
   }
 
   Future<void> _loadBoppedMusic() async {
-    final songs = await _youtubeService.getLocalBoppedSongs();
+    final songs = await _youtubeService.getFirebaseBoppedSongs();
     final reversedSongs = songs.reversed.toList();
 
     if (mounted) {

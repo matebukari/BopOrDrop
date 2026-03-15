@@ -23,7 +23,7 @@ class _DroppedScreenState extends State<DroppedScreen> {
   }
 
   Future<void> _loadDroppedMusic() async {
-    final songs = await _youtubeService.getLocalDroppedSongs();
+    final songs = await _youtubeService.getFirebaseDroppedSongs();
 
     // Show newest drops at the top
     final reversedSongs = songs.reversed.toList();
