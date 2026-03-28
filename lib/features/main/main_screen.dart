@@ -3,6 +3,8 @@ import '../discover/discover_screen.dart';
 import '../library/library_screen.dart';
 import '../profile/profile_screen.dart';
 
+final GlobalKey<DiscoverScreenState> discoverScreenKey = GlobalKey();
+
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -21,7 +23,7 @@ class _MainScreenState extends State<MainScreen> {
       textAlign: TextAlign.center, 
       style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))),
       
-    const DiscoverScreen(),
+    DiscoverScreen(key: discoverScreenKey),
     
     const LibraryScreen(),
       
@@ -29,6 +31,12 @@ class _MainScreenState extends State<MainScreen> {
   ];
 
   void _onItemTapped(int index) {
+    if (_selectedIndex == index) return;
+
+    if (_selectedIndex == 1 && index != 1) {
+      discoverScreenKey.currentState?.pauseMusicSilently();
+    }
+
     setState(() {
       _selectedIndex = index;
     });
@@ -39,7 +47,10 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       // Display the currently selected screen
-      body: _screens[_selectedIndex],
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _screens,
+      ),
       
       // The Bottom Navigation Bar
       bottomNavigationBar: Container(

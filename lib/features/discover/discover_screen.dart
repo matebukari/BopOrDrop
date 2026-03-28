@@ -17,10 +17,10 @@ class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
 
   @override
-  State<DiscoverScreen> createState() => _DiscoverScreenState();
+  State<DiscoverScreen> createState() => DiscoverScreenState();
 }
 
-class _DiscoverScreenState extends State<DiscoverScreen> {
+class DiscoverScreenState extends State<DiscoverScreen> {
   final _storage = const FlutterSecureStorage();
   final CardSwiperController _swiperController = CardSwiperController();
   final YoutubeService _youtubeService = YoutubeService();
@@ -75,35 +75,54 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       _selectedDestinationId = savedPlaylistId;
     }
 
-    // Fetch their personal playlists for the dropdown
-    final playlists = await _youtubeService.fetchUserPlaylists();
-    if (mounted) {
-      setState(() {
-        _myPlaylists = playlists;
-      });
-    }
-    // Load the initial deck
-    _loadTrendingMusic();
+    
+      
+    _youtubeService.fetchUserPlaylists().then((playlists) {
+      if (mounted) setState(() => _myPlaylists = playlists);
+    });
+
+    await _loadTrendingMusic();
   }
 
   Future<void> _loadTrendingMusic() async {
+    final cachedSongs = await _youtubeService.getCachedDeck();
+
+    if (cachedSongs.isNotEmpty && mounted) {
+      precacheImage(NetworkImage(cachedSongs[0].coverArtUrl), context);
+      setState(() {
+        _liveSongs = cachedSongs;
+        _isLoading = false;
+      });
+
+      _currentVideoId = _liveSongs[0].id;
+      _loadAndPlayPreview(_currentVideoId);
+    }
+
     final results = await _youtubeService.fetchTrendingMusic(targetPlaylistId: _selectedDestinationId);
 
     if (mounted) {
+      for (var song in results.songs.take(3)) {
+        precacheImage(NetworkImage(song.coverArtUrl), context);
+      }
+
       setState(() {
-        _liveSongs = results.songs;
+        // If we had cached songs, append the new ones. Otherwise, just use the new ones.
+        if (cachedSongs.isNotEmpty) {
+          final existingIds = _liveSongs.map((s) => s.id).toSet();
+          final newSongs = results.songs.where((s) => !existingIds.contains(s.id)).toList();
+          _liveSongs.addAll(newSongs);
+        } else {
+          _liveSongs = results.songs;
+        }
+
         _nextPageToken = results.nextPageToken;
         _isLoading = false;
       });
 
-      // Start the music if we actually got songs back
-      if (_liveSongs.isNotEmpty) {
+      // If we didn't have a cache, start playing the freshly fetched song now
+      if (cachedSongs.isEmpty && _liveSongs.isNotEmpty) {
         _currentVideoId = _liveSongs[0].id;
         _loadAndPlayPreview(_currentVideoId);
-      }
-
-      if (_liveSongs.length < 15 && _nextPageToken != null) {
-        _fetchMoreMusic();
       }
     }
   }
@@ -169,6 +188,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         _ytController.playVideo();
         setState(() => _isPlaying = true);
       }
+    }
+  }
+
+  void pauseMusicSilently() {
+    if (_isPlaying) {
+      _ytController.pauseVideo();
+      setState(() {
+        _isPlaying = false;
+      });
     }
   }
 
@@ -304,7 +332,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   child: Text(playlist.title),
                 );
               }),
-            ],
+
+              if (_selectedDestinationId != 'LIKED_MUSIC' && 
+                  !_myPlaylists.any((p) => p.id == _selectedDestinationId))
+                DropdownMenuItem(
+                  value: _selectedDestinationId,
+                  child: const Text('Loading...'),
+                ),
+            ], 
             onChanged: _onDestinationChanged,
           ),
         ),
