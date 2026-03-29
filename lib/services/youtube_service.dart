@@ -216,27 +216,6 @@ class YoutubeService {
     }
   }
 
-  Future<bool> likeVideo(String videoId) async {
-    try {
-      final url = Uri.parse(
-        'https://www.googleapis.com/youtube/v3/videos/rate?id=$videoId&rating=like',
-      );
-      var response = await _authenticatedRequest(
-        (token) => http.post(
-          url,
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Accept': 'application/json',
-          },
-        ),
-      );
-
-      return response?.statusCode == 204;
-    } catch (e) {
-      return false;
-    }
-  }
-
   Future<bool> saveSong(SongModel song, String targetPlaylistId) async {
     // 1. Save to Firebase Database
     final userId = await _getUserId;
@@ -255,9 +234,6 @@ class YoutubeService {
         print('BOP ERROR: Failed to save bop to Firebase: $e');
       }
     }
-
-    // 2. Save to YouTube
-    if (targetPlaylistId == 'LIKED_MUSIC') return await likeVideo(song.id);
 
     try {
       Set<String> existingIds = await _getAlreadyInPlaylistIds(
@@ -313,26 +289,7 @@ class YoutubeService {
       }
     }
 
-    // 2. Remove from YouTube
-    if (targetPlaylistId == 'LIKED_MUSIC') {
-      return await _removeLike(videoId);
-    } else {
-      return await _removeFromCustomPlaylist(videoId, targetPlaylistId);
-    }
-  }
-
-  Future<bool> _removeLike(String videoId) async {
-    try {
-      final url = Uri.parse(
-        'https://www.googleapis.com/youtube/v3/videos/rate?id=$videoId&rating=none',
-      );
-      var response = await _authenticatedRequest(
-        (token) => http.post(url, headers: {'Authorization': 'Bearer $token'}),
-      );
-      return response?.statusCode == 204;
-    } catch (e) {
-      return false;
-    }
+    return await _removeFromCustomPlaylist(videoId, targetPlaylistId);
   }
 
   Future<bool> _removeFromCustomPlaylist(
@@ -380,37 +337,6 @@ class YoutubeService {
   // ==========================================
   // --- UTILS: DUPLICATE PREVENTION ---
   // ==========================================
-
-  Future<Set<String>> _getAlreadyLikedIds(List<String> videoIds) async {
-    if (videoIds.isEmpty) return {};
-
-    final idString = videoIds.join(',');
-    final url = Uri.parse(
-      'https://www.googleapis.com/youtube/v3/videos/getRating?id=$idString',
-    );
-
-    var response = await _authenticatedRequest(
-      (token) => http.get(
-        url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      ),
-    );
-
-    if (response != null && response.statusCode == 200) {
-      final data = json.decode(response.body);
-      final List items = data['items'] ?? [];
-
-      Set<String> likedIds = {};
-      for (var item in items) {
-        if (item['rating'] == 'like') likedIds.add(item['videoId']);
-      }
-      return likedIds;
-    }
-    return {};
-  }
 
   Future<Set<String>> _getAlreadyInPlaylistIds(String playlistId) async {
     Set<String> savedIds = {};
@@ -602,7 +528,7 @@ class YoutubeService {
 
   Future<FetchResults> fetchTrendingMusic({
     String? pageToken,
-    String targetPlaylistId = 'LIKED_MUSIC',
+    String targetPlaylistId = '',
   }) async {
     try {
       String chartPlaylistId = _getRegionalPlaylistId();
@@ -671,15 +597,7 @@ class YoutubeService {
 
           await Future.wait([
             () async {
-              if (targetPlaylistId == 'LIKED_MUSIC') {
-                alreadySavedIds = await _getAlreadyLikedIds(
-                  fetchedSongs.map((s) => s.id).toList(),
-                );
-              } else {
-                alreadySavedIds = await _getAlreadyInPlaylistIds(
-                  targetPlaylistId,
-                );
-              }
+              alreadySavedIds = await _getAlreadyInPlaylistIds(targetPlaylistId);
             }(),
             () async {
               droppedIds = await getDroppedIds();

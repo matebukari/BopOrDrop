@@ -40,10 +40,12 @@ class DiscoverScreenState extends State<DiscoverScreen> {
   bool _isDeckEmpty = false;
 
   List<PlaylistModel> _myPlaylists = [];
-  String _selectedDestinationId = 'LIKED_MUSIC';
+
+  String _selectedDestinationId = '';
+
   String get _selectedPlaylistName {
-    if (_selectedDestinationId == 'LIKED_MUSIC') {
-      return '"Liked Music"';
+    if (_myPlaylists.isEmpty || _selectedDestinationId.isEmpty) {
+      return '"Your Playlist"';
     }
     try {
       final playlist = _myPlaylists.firstWhere((p) => p.id == _selectedDestinationId);
@@ -69,18 +71,31 @@ class DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Future<void> _initializeData() async {
-    // Read their saved preference!
-    String? savedPlaylistId = await _storage.read(key: 'preferred_save_destination');
-    if (savedPlaylistId != null) {
-      _selectedDestinationId = savedPlaylistId;
+    // 1. Fetch their personal playlists first
+    final playlists = await _youtubeService.fetchUserPlaylists();
+    if (mounted) {
+      setState(() {
+        _myPlaylists = playlists;
+      });
     }
 
-    
-      
-    _youtubeService.fetchUserPlaylists().then((playlists) {
-      if (mounted) setState(() => _myPlaylists = playlists);
-    });
+    // 2. Figure out which playlist to select
+    String? savedPlaylistId = await _storage.read(key: 'preferred_save_destination');
+    bool playlistStillExists = playlists.any((p) => p.id == savedPlaylistId);
 
+    if (mounted) {
+      setState(() {
+        if (savedPlaylistId != null && playlistStillExists) {
+          _selectedDestinationId = savedPlaylistId;
+        } else if (playlists.isNotEmpty) {
+          // If no save preference, default to their very first custom playlist
+          _selectedDestinationId = playlists.first.id;
+          _storage.write(key: 'preferred_save_destination', value: _selectedDestinationId);
+        }
+      });
+    }
+
+    // 3. Now fetch the music!
     await _loadTrendingMusic();
   }
 
@@ -315,31 +330,34 @@ class DiscoverScreenState extends State<DiscoverScreen> {
         elevation: 0,
         title: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
-            value: _selectedDestinationId,
+            value: _selectedDestinationId.isEmpty ? null : _selectedDestinationId,
             dropdownColor: const Color(0xFF1E1E1E),
             icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-            items: [
-              // The default "Liked Music" option
-              const DropdownMenuItem(
-                value: 'LIKED_MUSIC',
-                child: Text('Liked Music'),
-              ),
-              // Map their actual YouTube playlists
-              ..._myPlaylists.map((playlist) {
-                return DropdownMenuItem(
-                  value: playlist.id,
-                  child: Text(playlist.title),
-                );
-              }),
+            items: _myPlaylists.isEmpty 
+              ? [
+                  const DropdownMenuItem(
+                    value: null,
+                    child: Text('No Playlists Found'),
+                  )
+                ]
+              : [
+                  // Map their actual YouTube playlists
+                  ..._myPlaylists.map((playlist) {
+                    return DropdownMenuItem(
+                      value: playlist.id,
+                      child: Text(playlist.title),
+                    );
+                  }),
 
-              if (_selectedDestinationId != 'LIKED_MUSIC' && 
-                  !_myPlaylists.any((p) => p.id == _selectedDestinationId))
-                DropdownMenuItem(
-                  value: _selectedDestinationId,
-                  child: const Text('Loading...'),
-                ),
-            ], 
+                  // Temporarily inject the saved ID so Flutter doesn't crash while loading
+                  if (_selectedDestinationId.isNotEmpty && 
+                      !_myPlaylists.any((p) => p.id == _selectedDestinationId))
+                    DropdownMenuItem(
+                      value: _selectedDestinationId,
+                      child: const Text('Loading...'),
+                    ),
+                ],
             onChanged: _onDestinationChanged,
           ),
         ),
