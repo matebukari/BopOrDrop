@@ -1,117 +1,33 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import '../models/song_model.dart';
-import '../models/playlist_model.dart';
 import 'dart:ui' as ui;
 
-class FetchResults {
-  final List<SongModel> songs;
-  final String? nextPageToken;
-
-  FetchResults({required this.songs, this.nextPageToken});
-}
+import '../models/song_model.dart';
+import '../models/playlist_model.dart';
+import '../models/fetch_results.dart';
+import 'auth_service.dart';
+import 'firebase_music_service.dart';
 
 class YoutubeService {
-  final _storage = const FlutterSecureStorage();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  Set<String>? _cachedDroppedIds;
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  
+  // 1. Instantiate our background services
+  final AuthService _authService = AuthService();
+  late final FirebaseMusicService _firebaseService;
 
-  Future<Set<String>> getDroppedIds() async {
-    if (_cachedDroppedIds != null) return _cachedDroppedIds!;
-
-    final userId = await _getUserId;
-    if (userId == null) return {};
-
-    try {
-      final snapshot = await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('dropped_songs')
-          .get();
-
-      // We only need the IDs, not the full SongModel parsing
-      _cachedDroppedIds = snapshot.docs.map((doc) => doc.id).toSet();
-      return _cachedDroppedIds!;
-    } catch (e) {
-      return {};
-    }
-  }
-
-  Future<String?> get _getUserId async {
-    String? id = await _storage.read(key: 'youtube_user_id');
-
-    // Fallback: if we don't have it saved, quietly ask Google for it
-    if (id == null) {
-      try {
-        final account = await GoogleSignIn.instance
-            .attemptLightweightAuthentication();
-        if (account != null) {
-          id = account.id;
-          await _storage.write(key: 'youtube_user_id', value: id);
-        }
-      } catch (e) {
-        print('BOP ERROR: Could not fetch Google ID');
-      }
-    }
-    return id;
+  YoutubeService() {
+    _firebaseService = FirebaseMusicService(_authService);
   }
 
   // ==========================================
-  // --- AUTHENTICATION & NETWORKING ---
+  // --- FIREBASE DELEGATES ---
   // ==========================================
 
-  // Authenticated request wrapper with automatic token refresh
-  Future<http.Response?> _authenticatedRequest(
-    Future<http.Response> Function(String token) requestFunc,
-  ) async {
-    String? token = await _storage.read(key: 'youtube_access_token');
-    
-    if (token == null) {
-      token = await _refreshToken();
-      if (token == null) return null;
-    }
-
-    var response = await requestFunc(token);
-
-    // Handle expired token (401 Unauthorized)
-    if (response.statusCode == 401) {
-      token = await _refreshToken();
-      if (token != null) {
-        response = await requestFunc(token);
-      } else {
-        return null;
-      }
-    }
-    return response;
-  }
-
-  Future<String?> _refreshToken() async {
-    try {
-      final googleSignIn = GoogleSignIn.instance;
-      final GoogleSignInAccount? account = await googleSignIn
-          .attemptLightweightAuthentication();
-
-      if (account != null) {
-        final authorization = await account.authorizationClient
-            .authorizationForScopes([
-              'https://www.googleapis.com/auth/youtube',
-            ]);
-
-        final String? newToken = authorization?.accessToken;
-
-        if (newToken != null) {
-          await _storage.write(key: 'youtube_access_token', value: newToken);
-          return newToken;
-        }
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
+  Future<List<SongModel>> getFirebaseBoppedSongs() => _firebaseService.getFirebaseBoppedSongs();
+  Future<List<SongModel>> getFirebaseDroppedSongs() => _firebaseService.getFirebaseDroppedSongs();
+  Future<void> dropSong(SongModel song) => _firebaseService.dropSong(song);
+  Future<void> undropSong(String videoId) => _firebaseService.undropSong(videoId);
 
   // ==========================================
   // --- YOUTUBE API: PLAYLISTS & SAVING ---
@@ -122,7 +38,7 @@ class YoutubeService {
       final url = Uri.parse(
         'https://www.googleapis.com/youtube/v3/playlists?part=snippet&mine=true&maxResults=50',
       );
-      var response = await _authenticatedRequest(
+      var response = await _authService.youtubeAuthenticatedRequest(
         (token) => http.get(
           url,
           headers: {
@@ -137,13 +53,13 @@ class YoutubeService {
         final List items = data['items'] ?? [];
 
         return items
-            .map(
-              (item) => PlaylistModel(
-                id: item['id'],
-                title: item['snippet']['title'],
-              ),
-            )
-            .toList();
+          .map(
+            (item) => PlaylistModel(
+              id: item['id'],
+              title: item['snippet']['title'],
+            ),
+          )
+          .toList();
       }
       return [];
     } catch (e) {
@@ -158,14 +74,14 @@ class YoutubeService {
     try {
       List<SongModel> fetchedSongs = [];
       String urlString =
-          'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=$playlistId&maxResults=50';
+        'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=$playlistId&maxResults=50';
 
       if (pageToken != null) {
         urlString += '&pageToken=${Uri.encodeComponent(pageToken)}';
       }
 
       final url = Uri.parse(urlString);
-      var response = await _authenticatedRequest(
+      var response = await _authService.youtubeAuthenticatedRequest(
         (token) => http.get(
           url,
           headers: {
@@ -186,17 +102,15 @@ class YoutubeService {
           if (videoId == null || videoId is! String) continue;
 
           final thumbnails = snippet['thumbnails'];
-          final coverArt =
-              thumbnails?['maxres']?['url'] ??
+          final coverArt = thumbnails?['maxres']?['url'] ??
               thumbnails?['high']?['url'] ??
               thumbnails?['default']?['url'] ??
               '';
           String title = snippet['title'] ?? 'Unknown Title';
-          String cleanArtist =
-              (snippet['videoOwnerChannelTitle'] ?? 'Unknown Artist')
-                  .replaceAll(' - Topic', '')
-                  .replaceAll('VEVO', '')
-                  .trim();
+          String cleanArtist = (snippet['videoOwnerChannelTitle'] ?? 'Unknown Artist')
+              .replaceAll(' - Topic', '')
+              .replaceAll('VEVO', '')
+              .trim();
 
           fetchedSongs.add(
             SongModel(
@@ -217,28 +131,12 @@ class YoutubeService {
   }
 
   Future<bool> saveSong(SongModel song, String targetPlaylistId) async {
-    // 1. Save to Firebase Database
-    final userId = await _getUserId;
-    if (userId != null) {
-      try {
-        final songWithPlaylistId = song.copyWith(
-          savedPlaylistId: targetPlaylistId,
-        );
-        await _firestore
-            .collection('users')
-            .doc(userId)
-            .collection('bopped_songs')
-            .doc(song.id)
-            .set(songWithPlaylistId.toJson());
-      } catch (e) {
-        print('BOP ERROR: Failed to save bop to Firebase: $e');
-      }
-    }
+    // 1. Save to Firebase Database securely using the delegate
+    await _firebaseService.saveBoppedSong(song, targetPlaylistId);
 
+    // 2. Save to YouTube Custom Playlist
     try {
-      Set<String> existingIds = await _getAlreadyInPlaylistIds(
-        targetPlaylistId,
-      );
+      Set<String> existingIds = await _getAlreadyInPlaylistIds(targetPlaylistId);
       if (existingIds.contains(song.id)) return true;
 
       final url = Uri.parse(
@@ -251,7 +149,7 @@ class YoutubeService {
         },
       });
 
-      var response = await _authenticatedRequest(
+      var response = await _authService.youtubeAuthenticatedRequest(
         (token) => http.post(
           url,
           headers: {
@@ -264,8 +162,6 @@ class YoutubeService {
       );
 
       print('BOP DEBUG: YouTube Save Status Code: ${response?.statusCode}');
-      print('BOP DEBUG: YouTube Save Response Body: ${response?.body}');
-
       return response?.statusCode == 200 || response?.statusCode == 201;
     } catch (e) {
       print('BOP DEBUG: Crash inside saveSong: $e');
@@ -274,21 +170,10 @@ class YoutubeService {
   }
 
   Future<bool> unsaveSong(String videoId, String targetPlaylistId) async {
-    // 1. Remove from Firebase Database
-    final userId = await _getUserId;
-    if (userId != null) {
-      try {
-        await _firestore
-            .collection('users')
-            .doc(userId)
-            .collection('bopped_songs')
-            .doc(videoId)
-            .delete();
-      } catch (e) {
-        print('BOP ERROR: Failed to remove bop from Firebase: $e');
-      }
-    }
+    // 1. Remove from Firebase Database securely using the delegate
+    await _firebaseService.removeBoppedSong(videoId);
 
+    // 2. Remove from YouTube Custom Playlist
     return await _removeFromCustomPlaylist(videoId, targetPlaylistId);
   }
 
@@ -300,7 +185,7 @@ class YoutubeService {
       final searchUrl = Uri.parse(
         'https://www.googleapis.com/youtube/v3/playlistItems?part=id&playlistId=$playlistId&videoId=$videoId',
       );
-      var searchResponse = await _authenticatedRequest(
+      var searchResponse = await _authService.youtubeAuthenticatedRequest(
         (token) => http.get(
           searchUrl,
           headers: {
@@ -319,7 +204,7 @@ class YoutubeService {
         final deleteUrl = Uri.parse(
           'https://www.googleapis.com/youtube/v3/playlistItems?id=$playlistItemId',
         );
-        var deleteResponse = await _authenticatedRequest(
+        var deleteResponse = await _authService.youtubeAuthenticatedRequest(
           (token) => http.delete(
             deleteUrl,
             headers: {'Authorization': 'Bearer $token'},
@@ -350,7 +235,7 @@ class YoutubeService {
           urlString += '&pageToken=${Uri.encodeComponent(nextPageToken)}';
         }
         final url = Uri.parse(urlString);
-        var response = await _authenticatedRequest(
+        var response = await _authService.youtubeAuthenticatedRequest(
           (token) => http.get(
             url,
             headers: {
@@ -377,80 +262,6 @@ class YoutubeService {
       return savedIds;
     } catch (e) {
       return savedIds;
-    }
-  }
-
-  // ==========================================
-  // --- FIREBASE CLOUD STORAGE (BOPPED & DROPPED) ---
-  // ==========================================
-
-  Future<List<SongModel>> getFirebaseBoppedSongs() async {
-    final userId = await _getUserId;
-    if (userId == null) return [];
-    try {
-      final snapshot = await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('bopped_songs')
-          .get();
-
-      return snapshot.docs
-          .map((doc) => SongModel.fromJson(doc.data()))
-          .toList();
-    } catch (e) {
-      print('BOP ERROR: Failed to fetch bops from Firebase: $e');
-      return [];
-    }
-  }
-
-  Future<List<SongModel>> getFirebaseDroppedSongs() async {
-    final userId = await _getUserId;
-    if (userId == null) return [];
-    try {
-      final snapshot = await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('dropped_songs')
-          .get();
-
-      return snapshot.docs
-          .map((doc) => SongModel.fromJson(doc.data()))
-          .toList();
-    } catch (e) {
-      print('BOP ERROR: Failed to fetch drops from Firebase: $e');
-      return [];
-    }
-  }
-
-  Future<void> dropSong(SongModel song) async {
-    _cachedDroppedIds?.add(song.id);
-    final userId = await _getUserId;
-    if (userId == null) return;
-    try {
-      await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('dropped_songs')
-          .doc(song.id)
-          .set(song.toJson());
-    } catch (e) {
-      print('BOP ERROR: Failed to save drop to Firebase: $e');
-    }
-  }
-
-  Future<void> undropSong(String videoId) async {
-    _cachedDroppedIds?.remove(videoId);
-    final userId = await _getUserId;
-    if (userId == null) return;
-    try {
-      await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('dropped_songs')
-          .doc(videoId)
-          .delete();
-    } catch (e) {
-      print('BOP ERROR: Failed to remove drop from Firebase: $e');
     }
   }
 
@@ -532,99 +343,123 @@ class YoutubeService {
   }) async {
     try {
       String chartPlaylistId = _getRegionalPlaylistId();
-      String urlString =
+
+      List<SongModel> finalSongs = [];
+      String? currentToken = pageToken;
+
+      // Safety net: Max 4 pages (200 songs) checked per fetch 
+      // to prevent infinite API looping if they've dropped everything
+      int maxPagesToFetch = 4; 
+      int pagesFetched = 0;
+      
+      while (finalSongs.isEmpty && pagesFetched < maxPagesToFetch) {
+        String urlString =
           'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=$chartPlaylistId&maxResults=50';
 
-      if (pageToken != null) {
-        urlString += '&pageToken=${Uri.encodeComponent(pageToken)}';
+        if (pageToken != null) {
+          urlString += '&pageToken=${Uri.encodeComponent(pageToken)}';
+        }
+
+        final url = Uri.parse(urlString);
+
+        var response = await _authService.youtubeAuthenticatedRequest(
+          (token) => http.get(
+            url,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          ),
+        );
+
+        if (response != null && response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final List items = data['items'] ?? [];
+          currentToken = data['nextPageToken'];
+
+          List<SongModel> fetchedPage = [];
+
+          for (var item in items) {
+            final snippet = item['snippet'];
+            final videoId = snippet['resourceId']?['videoId'];
+            if (videoId == null || videoId is! String) continue;
+
+            final thumbnails = snippet['thumbnails'];
+            if (thumbnails == null) continue;
+
+            final coverArt =
+                thumbnails['maxres']?['url'] ??
+                thumbnails['high']?['url'] ??
+                thumbnails['default']?['url'] ??
+                '';
+
+            String title = snippet['title'] ?? 'Unknown Title';
+            String rawArtist =
+                snippet['videoOwnerChannelTitle'] ?? 'Unknown Artist';
+            final cleanArtist = rawArtist
+                .replaceAll(' - Topic', '')
+                .replaceAll('VEVO', '')
+                .trim();
+
+            fetchedPage.add(
+              SongModel(
+                id: videoId,
+                title: title,
+                artist: cleanArtist,
+                coverArtUrl: coverArt,
+              ),
+            );
+          }
+
+          // Filter out existing saved and dropped songs
+          if (fetchedPage.isNotEmpty) {
+            Set<String> alreadySavedIds = {};
+            Set<String> droppedIds = {};
+
+            await Future.wait([
+              () async {
+                alreadySavedIds = await _getAlreadyInPlaylistIds(targetPlaylistId);
+              }(),
+              () async {
+                droppedIds = await _firebaseService.getDroppedIds();
+              }(),
+            ]);
+
+            // Filter out dropped songs
+            fetchedPage.removeWhere(
+              (song) =>
+                  alreadySavedIds.contains(song.id) ||
+                  droppedIds.contains(song.id),
+            );
+          }
+
+          // Add whatever fresh songs survived the filter to our final list!
+          finalSongs.addAll(fetchedPage);
+          pagesFetched++;
+
+          // If there is no next page (we reached song #100), break out early
+          if (currentToken == null) break;
+
+        } else {
+          // If the API crashes or returns an error, stop looping
+          break;
+        }
       }
-
-      final url = Uri.parse(urlString);
-
-      var response = await _authenticatedRequest(
-        (token) => http.get(
-          url,
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Accept': 'application/json',
-          },
-        ),
-      );
-
-      if (response != null && response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List items = data['items'] ?? [];
-        final String? nextToken = data['nextPageToken'];
-
-        List<SongModel> fetchedSongs = [];
-
-        for (var item in items) {
-          final snippet = item['snippet'];
-          final videoId = snippet['resourceId']?['videoId'];
-          if (videoId == null || videoId is! String) continue;
-
-          final thumbnails = snippet['thumbnails'];
-          if (thumbnails == null) continue;
-
-          final coverArt =
-              thumbnails['maxres']?['url'] ??
-              thumbnails['high']?['url'] ??
-              thumbnails['default']?['url'] ??
-              '';
-
-          String title = snippet['title'] ?? 'Unknown Title';
-          String rawArtist =
-              snippet['videoOwnerChannelTitle'] ?? 'Unknown Artist';
-          final cleanArtist = rawArtist
-              .replaceAll(' - Topic', '')
-              .replaceAll('VEVO', '')
-              .trim();
-
-          fetchedSongs.add(
-            SongModel(
-              id: videoId,
-              title: title,
-              artist: cleanArtist,
-              coverArtUrl: coverArt,
-            ),
-          );
-        }
-
-        // Filter out existing saved songs
-        if (fetchedSongs.isNotEmpty) {
-          Set<String> alreadySavedIds = {};
-          Set<String> droppedIds = {};
-
-          await Future.wait([
-            () async {
-              alreadySavedIds = await _getAlreadyInPlaylistIds(targetPlaylistId);
-            }(),
-            () async {
-              droppedIds = await getDroppedIds();
-            }(),
-          ]);
-
-          // Filter out dropped songs
-          fetchedSongs.removeWhere(
-            (song) =>
-                alreadySavedIds.contains(song.id) ||
-                droppedIds.contains(song.id),
-          );
-        }
-
+      
+      // Cache the newly pulled and filtered deck to local storage
+      if (finalSongs.isNotEmpty) {
         try {
           final cacheData = json.encode(
-            fetchedSongs.map((s) => s.toJson()).toList(),
+            finalSongs.map((s) => s.toJson()).toList(),
           );
           await _storage.write(key: 'cached_discover_deck', value: cacheData);
         } catch (e) {
           print('Failed to cache deck: $e');
         }
-
-        return FetchResults(songs: fetchedSongs, nextPageToken: nextToken);
-      } else {
-        return FetchResults(songs: []);
       }
+
+      return FetchResults(songs: finalSongs, nextPageToken: currentToken);
+
     } catch (e) {
       print('BOP ERROR: Crash inside fetchTrendingMusic: $e');
       return FetchResults(songs: []);

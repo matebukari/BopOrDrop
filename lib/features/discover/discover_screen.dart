@@ -26,9 +26,9 @@ class DiscoverScreenState extends State<DiscoverScreen> {
   final YoutubeService _youtubeService = YoutubeService();
   late YoutubePlayerController _ytController;
   Timer? _playbackTimer;
-  
+
   bool _isPlaying = true;
-  bool _previewFinished = false; 
+  bool _previewFinished = false;
   String _currentVideoId = '';
 
   bool _isLoading = true;
@@ -48,7 +48,9 @@ class DiscoverScreenState extends State<DiscoverScreen> {
       return '"Your Playlist"';
     }
     try {
-      final playlist = _myPlaylists.firstWhere((p) => p.id == _selectedDestinationId);
+      final playlist = _myPlaylists.firstWhere(
+        (p) => p.id == _selectedDestinationId,
+      );
       return '"${playlist.title}"';
     } catch (e) {
       return 'selected playlist';
@@ -80,7 +82,9 @@ class DiscoverScreenState extends State<DiscoverScreen> {
     }
 
     // 2. Figure out which playlist to select
-    String? savedPlaylistId = await _storage.read(key: 'preferred_save_destination');
+    String? savedPlaylistId = await _storage.read(
+      key: 'preferred_save_destination',
+    );
     bool playlistStillExists = playlists.any((p) => p.id == savedPlaylistId);
 
     if (mounted) {
@@ -90,7 +94,10 @@ class DiscoverScreenState extends State<DiscoverScreen> {
         } else if (playlists.isNotEmpty) {
           // If no save preference, default to their very first custom playlist
           _selectedDestinationId = playlists.first.id;
-          _storage.write(key: 'preferred_save_destination', value: _selectedDestinationId);
+          _storage.write(
+            key: 'preferred_save_destination',
+            value: _selectedDestinationId,
+          );
         }
       });
     }
@@ -113,7 +120,9 @@ class DiscoverScreenState extends State<DiscoverScreen> {
       _loadAndPlayPreview(_currentVideoId);
     }
 
-    final results = await _youtubeService.fetchTrendingMusic(targetPlaylistId: _selectedDestinationId);
+    final results = await _youtubeService.fetchTrendingMusic(
+      targetPlaylistId: _selectedDestinationId,
+    );
 
     if (mounted) {
       for (var song in results.songs.take(3)) {
@@ -124,7 +133,9 @@ class DiscoverScreenState extends State<DiscoverScreen> {
         // If we had cached songs, append the new ones. Otherwise, just use the new ones.
         if (cachedSongs.isNotEmpty) {
           final existingIds = _liveSongs.map((s) => s.id).toSet();
-          final newSongs = results.songs.where((s) => !existingIds.contains(s.id)).toList();
+          final newSongs = results.songs
+              .where((s) => !existingIds.contains(s.id))
+              .toList();
           _liveSongs.addAll(newSongs);
         } else {
           _liveSongs = results.songs;
@@ -150,7 +161,10 @@ class DiscoverScreenState extends State<DiscoverScreen> {
       _isFetchingMore = true;
     });
 
-    final result = await _youtubeService.fetchTrendingMusic(pageToken: _nextPageToken, targetPlaylistId: _selectedDestinationId);
+    final result = await _youtubeService.fetchTrendingMusic(
+      pageToken: _nextPageToken,
+      targetPlaylistId: _selectedDestinationId,
+    );
 
     if (mounted) {
       setState(() {
@@ -160,31 +174,43 @@ class DiscoverScreenState extends State<DiscoverScreen> {
       });
     }
 
-    if ((result.songs.isEmpty || _liveSongs.length < 15) && _nextPageToken != null) {
+    if ((result.songs.isEmpty || _liveSongs.length < 15) &&
+        _nextPageToken != null) {
       _fetchMoreMusic();
     }
   }
 
   void _loadAndPlayPreview(String videoId) async {
+    if (videoId.isEmpty) return;
+
     _playbackTimer?.cancel();
     setState(() {
       _isPlaying = true;
       _previewFinished = false;
     });
 
-    await _ytController.loadVideoById(videoId: videoId, startSeconds: 45);
-    _ytController.playVideo();
-    _startPreviewTimer();
+    try {
+      await _ytController.loadVideoById(videoId: videoId, startSeconds: 45);
+      _ytController.playVideo();
+      _startPreviewTimer();
+    } catch (e) {
+      print('BOP DEBUG: YouTube Player not ready to load yet: $e');
+    }
   }
 
   void _startPreviewTimer() {
     _playbackTimer?.cancel();
     _playbackTimer = Timer(const Duration(seconds: 30), () {
-      _ytController.pauseVideo();
+      try {
+        _ytController.pauseVideo();
+      } catch (e) {
+        // Silently catch
+      }
+
       if (mounted) {
         setState(() {
           _isPlaying = false;
-          _previewFinished = true; 
+          _previewFinished = true;
         });
       }
     });
@@ -198,7 +224,7 @@ class DiscoverScreenState extends State<DiscoverScreen> {
       setState(() => _isPlaying = false);
     } else {
       if (_previewFinished) {
-        _loadAndPlayPreview(_currentVideoId); 
+        _loadAndPlayPreview(_currentVideoId);
       } else {
         _ytController.playVideo();
         setState(() => _isPlaying = true);
@@ -208,14 +234,22 @@ class DiscoverScreenState extends State<DiscoverScreen> {
 
   void pauseMusicSilently() {
     if (_isPlaying) {
-      _ytController.pauseVideo();
+      try {
+        _ytController.pauseVideo();
+      } catch (e) {
+        // Silently catch
+      }
       setState(() {
         _isPlaying = false;
       });
     }
   }
 
-  bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
+  bool _onSwipe(
+    int previousIndex,
+    int? currentIndex,
+    CardSwiperDirection direction,
+  ) {
     final swipedSong = _liveSongs[previousIndex];
 
     if (direction == CardSwiperDirection.right) {
@@ -235,7 +269,11 @@ class DiscoverScreenState extends State<DiscoverScreen> {
         _loadAndPlayPreview(_currentVideoId);
       }
     } else {
-      _ytController.pauseVideo();
+      try {
+        _ytController.pauseVideo();
+      } catch (e) {
+        // Silently catch
+      }
       _playbackTimer?.cancel();
       setState(() {
         _isPlaying = false;
@@ -245,7 +283,11 @@ class DiscoverScreenState extends State<DiscoverScreen> {
     return true;
   }
 
-  bool _onUndo(int? previousIndex, int currentIndex, CardSwiperDirection direction) {
+  bool _onUndo(
+    int? previousIndex,
+    int currentIndex,
+    CardSwiperDirection direction,
+  ) {
     if (currentIndex < _liveSongs.length) {
       _currentVideoId = _liveSongs[currentIndex].id;
       _loadAndPlayPreview(_currentVideoId);
@@ -277,7 +319,11 @@ class DiscoverScreenState extends State<DiscoverScreen> {
 
   void _onDeckEmpty() {
     setState(() => _isDeckEmpty = true);
-    _ytController.pauseVideo();
+    try {
+      _ytController.pauseVideo();
+    } catch (e) {
+      // Silently catch
+    }
     _playbackTimer?.cancel();
   }
 
@@ -294,7 +340,7 @@ class DiscoverScreenState extends State<DiscoverScreen> {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     }
   }
-  
+
   Widget _buildBottomControls() {
     if (_isDeckEmpty || _liveSongs.isEmpty) return const SizedBox.shrink();
 
@@ -313,7 +359,7 @@ class DiscoverScreenState extends State<DiscoverScreen> {
       ],
     );
   }
-  
+
   @override
   void dispose() {
     _playbackTimer?.cancel();
@@ -330,34 +376,42 @@ class DiscoverScreenState extends State<DiscoverScreen> {
         elevation: 0,
         title: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
-            value: _selectedDestinationId.isEmpty ? null : _selectedDestinationId,
+            value: _selectedDestinationId.isEmpty
+                ? null
+                : _selectedDestinationId,
             dropdownColor: const Color(0xFF1E1E1E),
             icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-            items: _myPlaylists.isEmpty 
-              ? [
-                  const DropdownMenuItem(
-                    value: null,
-                    child: Text('No Playlists Found'),
-                  )
-                ]
-              : [
-                  // Map their actual YouTube playlists
-                  ..._myPlaylists.map((playlist) {
-                    return DropdownMenuItem(
-                      value: playlist.id,
-                      child: Text(playlist.title),
-                    );
-                  }),
-
-                  // Temporarily inject the saved ID so Flutter doesn't crash while loading
-                  if (_selectedDestinationId.isNotEmpty && 
-                      !_myPlaylists.any((p) => p.id == _selectedDestinationId))
-                    DropdownMenuItem(
-                      value: _selectedDestinationId,
-                      child: const Text('Loading...'),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+            items: _myPlaylists.isEmpty
+                ? [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('No Playlists Found'),
                     ),
-                ],
+                  ]
+                : [
+                    // Map their actual YouTube playlists
+                    ..._myPlaylists.map((playlist) {
+                      return DropdownMenuItem(
+                        value: playlist.id,
+                        child: Text(playlist.title),
+                      );
+                    }),
+
+                    // Temporarily inject the saved ID so Flutter doesn't crash while loading
+                    if (_selectedDestinationId.isNotEmpty &&
+                        !_myPlaylists.any(
+                          (p) => p.id == _selectedDestinationId,
+                        ))
+                      DropdownMenuItem(
+                        value: _selectedDestinationId,
+                        child: const Text('Loading...'),
+                      ),
+                  ],
             onChanged: _onDestinationChanged,
           ),
         ),
@@ -366,10 +420,11 @@ class DiscoverScreenState extends State<DiscoverScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            Offstage(
-              offstage: true,
-              child: YoutubePlayer(controller: _ytController),
-            ),
+            if (_currentVideoId.isNotEmpty)
+              Offstage(
+                offstage: true,
+                child: YoutubePlayer(controller: _ytController),
+              ),
             Column(
               children: [
                 DiscoverHeader(playlistName: _selectedPlaylistName),
@@ -378,24 +433,38 @@ class DiscoverScreenState extends State<DiscoverScreen> {
 
                 Expanded(
                   child: _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: Colors.greenAccent))
-                    : _isDeckEmpty
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: Colors.greenAccent,
+                          ),
+                        )
+                      : _isDeckEmpty
                       ? const EmptyDeckView()
                       : _liveSongs.isEmpty
-                        ? const Center(child: Text("No songs found.", style: TextStyle(color: Colors.white)))
-                        : CardSwiper(
-                            controller: _swiperController,
-                            cardsCount: _liveSongs.length,
-                            numberOfCardsDisplayed: _liveSongs.length == 1 ? 1 : 2,
-                            isLoop: false,
-                            onEnd: _onDeckEmpty,                            
-                            onSwipe: _onSwipe,
-                            onUndo: _onUndo,
-                            allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
-                            cardBuilder: (context, index, percentX, percentY) {
-                              return SongCard(song: _liveSongs[index]); 
-                            },
+                      ? const Center(
+                          child: Text(
+                            "No songs found.",
+                            style: TextStyle(color: Colors.white),
                           ),
+                        )
+                      : CardSwiper(
+                          controller: _swiperController,
+                          cardsCount: _liveSongs.length,
+                          numberOfCardsDisplayed: _liveSongs.length == 1
+                              ? 1
+                              : 2,
+                          isLoop: false,
+                          onEnd: _onDeckEmpty,
+                          onSwipe: _onSwipe,
+                          onUndo: _onUndo,
+                          allowedSwipeDirection:
+                              const AllowedSwipeDirection.symmetric(
+                                horizontal: true,
+                              ),
+                          cardBuilder: (context, index, percentX, percentY) {
+                            return SongCard(song: _liveSongs[index]);
+                          },
+                        ),
                 ),
                 _buildBottomControls(),
               ],
