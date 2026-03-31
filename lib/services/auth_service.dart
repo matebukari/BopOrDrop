@@ -38,9 +38,6 @@ class AuthService {
       // SAVE TO DEVICE: We need both the token and the ID for the background services!
       await _storage.write(key: 'youtube_access_token', value: youtubeAccessToken);
       await _storage.write(key: 'youtube_user_id', value: googleUser.id);
-      final List<String> scopes = [
-        'https://www.googleapis.com/auth/youtube',
-      ];
 
       final OAuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
@@ -116,15 +113,14 @@ class AuthService {
 
   Future<String?> refreshYoutubeToken() async {
     try {
-      // Always ensure initialized before background tasks in v7
       await _googleSignIn.initialize(serverClientId: _serverClientId);
 
-      // v7 syntax: use attemptLightweightAuthentication instead of signInSilently
+      // attemptLightweightAuthentication instead of signInSilently
       final GoogleSignInAccount? account = await _googleSignIn.attemptLightweightAuthentication();
       
       if (account != null) {
         final authClient = account.authorizationClient;
-        final authorization = await authClient?.authorizationForScopes(_scopes);
+        final authorization = await authClient.authorizationForScopes(_scopes);
         
         final String? newToken = authorization?.accessToken;
         if (newToken != null) {
